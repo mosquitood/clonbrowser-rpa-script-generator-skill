@@ -1,0 +1,28 @@
+{
+  "status": "success",
+  "attempt": 1,
+  "max_attempts": 3,
+  "task": "Complete the requested browser workflow and collect the required output",
+  "start_url": "https://example.com/",
+  "playwright_python": "from playwright.sync_api import sync_playwright\n\nwith sync_playwright() as p:\n    browser = p.chromium.launch(headless=False)\n    page = browser.new_page()\n    page.goto('https://example.com/')\n    page.get_by_role('button', name='Example').click()\n",
+  "steps": [
+    {
+      "intent": "Open the target page",
+      "action": "goto",
+      "locator": null,
+      "value": "https://example.com/",
+      "wait_for": "target page loaded"
+    },
+    {
+      "intent": "Perform the next required browser action",
+      "action": "click",
+      "locator": "page.get_by_role('button', name='Example')",
+      "value": null,
+      "wait_for": "the expected UI state is visible"
+    }
+  ],
+  "assumptions": [
+    "The target page is reachable in the current browser context."
+  ],
+  "warnings": []
+}
