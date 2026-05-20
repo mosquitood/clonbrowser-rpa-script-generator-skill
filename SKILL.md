@@ -1,6 +1,6 @@
 ---
 name: rpa-developer
-description: Develop RPA Editor NextGen automation scripts from browser exploration results and user goals. Use when the user asks to write, create, inspect, refactor, review, or debug RPA scripts, especially when converting browser or Playwright Python interaction steps into the project-standard RPA script structure.
+description: Develop RPA Editor NextGen automation scripts from Browser upstream exploration results and user goals. Use when the user asks to write, create, inspect, refactor, review, or debug RPA scripts, especially when converting Browser-discovered page interactions or Playwright Python steps into the project-standard RPA script structure.
 ---
 
 # RPA Developer Skill
@@ -9,25 +9,51 @@ description: Develop RPA Editor NextGen automation scripts from browser explorat
 
 Use this workflow when the user asks for any browser task that must become an RPA script, for example: open a target site, select a category, fill fields, search, extract page data, or complete another browser workflow and convert the discovered steps into Playwright Python handoff data.
 
-1. Use the `browser` skill first when page inspection, clicking, typing, screenshots, or element discovery is needed.
-2. Treat the browser step as an upstream dependency with an explicit status. Continue only when the browser handoff contains `"status": "success"`.
-3. If the browser handoff is missing, invalid, or has any status other than `success`, rerun the browser step. Retry at most 3 total attempts.
-4. If all 3 browser attempts fail, stop immediately and report the RPA generation as failed. Do not generate final RPA files from failed or partial browser output.
-5. Ask the browser step to produce a Playwright Python handoff, not a finished RPA script.
-6. The handoff must focus only on reliable browser facts:
+1. Before starting page exploration, check that Codex has the upstream Browser skill from `plugin://browser@openai-bundled` available. Accept the installed skill names/chips `browser:browser`, `Browser`, `@browser`, or `@浏览器`. If it is not installed or not available in the current session, stop before exploration and tell the user to install or enable `plugin://browser@openai-bundled`.
+2. Use `@浏览器` / `browser:browser` first when page inspection, clicking, typing, screenshots, or element discovery is needed. Do not use generic web search, a separate ad hoc Playwright session, or another browser backend as the upstream exploration path unless the user explicitly asks for a fallback.
+3. Force headed mode for every upstream Browser run. Load the Browser skill, use the in-app/browser plugin surface, and make the browser visible before navigation by enabling the Browser visibility capability when it is available. If headed/visible mode cannot be enabled, stop and report that the Browser upstream is unavailable in the required mode.
+4. Treat the Browser step as an upstream dependency with an explicit status. Continue only when the Browser handoff contains `"status": "success"`.
+5. If the Browser handoff is missing, invalid, or has any status other than `success`, rerun the Browser step. Retry at most 3 total attempts.
+6. If all 3 Browser attempts fail, stop immediately and report the RPA generation as failed. Do not generate final RPA files from failed or partial Browser output.
+7. Ask the Browser step to produce a Playwright Python handoff, not a finished RPA script.
+8. The handoff must focus only on reliable Browser-discovered facts:
    - target URL and final page state
    - selectors or locator strategies
    - fill values and click order
    - waits, assertions, and known navigation boundaries
    - screenshots or trace notes when relevant
-7. Save or request the handoff in the JSON shape described by `references/browser-handoff-schema.md` when the task has more than a few steps.
-8. Validate the handoff with `scripts/validate_browser_handoff.py` before generating final RPA files. This validator must pass before RPA generation starts.
-9. Convert the validated handoff into the RPA Editor NextGen standard files: `readme.md`, `script.py`, `source.py`, and `main.py`.
-10. Keep browser-discovery code separate from final RPA code. Do not paste raw exploratory Playwright code directly into the final script unless it matches this framework's page-object conventions.
+9. Save or request the handoff in the JSON shape described by `references/browser-handoff-schema.md` when the task has more than a few steps.
+10. Validate the handoff with `scripts/validate_browser_handoff.py` before generating final RPA files. This validator must pass before RPA generation starts.
+11. After a valid successful handoff, automatically generate the RPA Editor NextGen standard files in the same task: `readme.md`, `script.py`, `source.py`, and `main.py`. Do not stop after printing, logging, summarizing, or reporting Browser results, and do not ask whether to generate scripts unless the user explicitly asks for exploration only.
+12. Keep Browser discovery code separate from final RPA code. Do not paste raw exploratory Playwright code directly into the final script unless it matches this framework's page-object conventions.
+
+## Explicit State-Setting Rule
+
+When the user asks to set any page state, instruct the upstream Browser skill to perform the setting flow even if the page already appears to be in the requested state. This applies generically to language, locale, delivery destination, marketplace, category, sort order, filters, search scope, account context, toggles, form defaults, and similar stateful controls.
+
+Do not accept a pre-existing matching label, selected option, URL parameter, cookie state, or visible header as enough evidence by itself. The Browser handoff must include explicit steps that open the relevant control, choose or re-apply the requested value, submit or confirm the change when the UI provides a confirmation action, and then assert the final state. If the UI does not allow re-applying an already-selected value, the Browser handoff must record the attempted control path, the disabled or unavailable action, and the final authoritative confirmation.
+
+For every requested state-setting goal, require at least one `steps[]` entry whose `intent` says it is re-applying that requested state. A handoff that only reports "already set" without an action attempt is incomplete and must be retried.
+
+## Completion Gate
+
+A browser-to-RPA task is complete only after the final RPA files have been written and validated. Treat printed product names, extracted page data, screenshots, or a successful Browser handoff as intermediate evidence, not as the final deliverable.
+
+After every successful Browser handoff:
+
+1. Choose the output directory before writing files:
+   - If the user gives a target script directory, write there.
+   - Otherwise, create a task-derived folder under the current workspace's `outputs/` directory, using a short lowercase hyphenated script name.
+2. Write all four required files: `readme.md`, `script.py`, `source.py`, and `main.py`.
+3. Ensure `script.py`, `source.py`, and `main.py` all contain the current task inputs and runtime configuration from the successful handoff. Do not hard-code desired result items, extracted result values, product names, titles, IDs, prices, or other page outputs as variables.
+4. Validate generated Python with `python -m py_compile` for `main.py`, `script.py`, and `source.py`; remove temporary `__pycache__` folders after validation.
+5. In the final response, list the generated file paths and validation result. If no files were generated, explicitly report the task as incomplete.
+
+If a run only prints or returns extracted values after a successful handoff, continue working immediately and generate the RPA files before sending the final answer.
 
 ## Expected Browser Handoff
 
-The browser handoff is an intermediate artifact. It should answer: "how to find the elements and what values to fill". It should not decide the final RPA framework structure.
+The Browser handoff is an intermediate artifact. It should answer: "how to find the elements and what values to fill". It should not decide the final RPA framework structure.
 
 Minimal shape:
 
@@ -67,6 +93,14 @@ If validation fails because the upstream browser step did not succeed, rerun the
 ## RPA Generation Contract
 
 After receiving the browser handoff, generate project-standard RPA code according to the rules below. The generated RPA should preserve the browser intent while adapting implementation to `CorePageObject`, framework logging, configuration forms, variables, and local debug entrypoints.
+
+## Input And Output Boundary
+
+Generated variables must represent inputs, runtime configuration, or output destinations only. Examples include start URL, search keywords, requested locale, requested delivery destination, category, sort/filter choices, row limits, window settings, connector settings, and output field mappings.
+
+Do not put desired result items or observed result values into `SCRIPT_VARIABLES`, `SCRIPT_FORMS`, `VARIABLE_VALUES`, `ARGS_SETTINGS`, or `VariableValue` properties. Result values include product names, listing titles, IDs, prices, URLs, extracted text, counts, scraped records, and any other data the RPA script is supposed to discover while running.
+
+Use Browser handoff result values only as validation evidence and as guidance for selectors or extraction logic. The final `source.py` must reproduce the extraction at runtime and then report the discovered values through framework logging, business logging, connector output, or the task-appropriate output channel. Local `main.py` may provide input/config values needed to reproduce the run, but it must not pre-fill the expected extracted results.
 ## main.py Generation Standard
 
 Generate `main.py` with the developer runner entrypoint from `app.core.developer.run`, not the older runtime developer import. The generated file must follow this shape:
@@ -82,8 +116,9 @@ BROWSER_CONFIG = BrowserConfig(
 )
 
 VARIABLE_VALUES = {
-    # Include every task-specific variable declared in script.py.
+    # Include every input/config variable declared in script.py.
     # Values must come from the user's current request and the validated browser handoff.
+    # Do not include desired result items or observed extracted result values here.
     # Do not hard-code examples from prior tasks or from this skill's documentation.
     "<variable_name>": "<task_value>",
     "resolution_options": "preset",
@@ -99,9 +134,9 @@ Adapt these placeholders for each generated script:
 - `<business_namespace>`: script package namespace under `scripts`, chosen from the user's current project context.
 - `<script_name>`: generated script module folder, derived from the current task.
 - `<PageClassName>`: page-object class from `source.py`, derived from the current task.
-- `<variable_name>` and `<task_value>`: all runtime variables required by the generated script.
+- `<variable_name>` and `<task_value>`: input/config variables required by the generated script, not extracted output values.
 
-Keep `BROWSER_CONFIG.platform`, `BROWSER_CONFIG.id`, default window variables, and `timeout=30000` unless the user explicitly requests different runtime settings. Always include task variables in `VARIABLE_VALUES` so local developer runs do not depend on external defaults. Never include site-specific or task-specific values in the skill itself; derive them only from the current user request and the successful handoff.
+Keep `BROWSER_CONFIG.platform`, `BROWSER_CONFIG.id`, default window variables, and `timeout=30000` unless the user explicitly requests different runtime settings. Always include input/config variables in `VARIABLE_VALUES` so local developer runs do not depend on external defaults. Never include site-specific or task-specific values in the skill itself; derive them only from the current user request and the successful handoff. Never include extracted outputs in `VARIABLE_VALUES`.
 ## source.py Variable Standard
 
 Generate `source.py` so runtime variables are read through `self.proxy.use(..., VariableValue).value()` properties instead of declaring variable placeholders inside `ARGS_SETTINGS` or relying on class attributes being injected.
@@ -136,7 +171,7 @@ def confirm_required(self) -> bool:
     return str(value).lower() in ("true", "1", "yes")
 ```
 
-Do not place business variables in `ARGS_SETTINGS`. Business variables belong in `script.py` forms, `main.py` `VARIABLE_VALUES`, and typed `@property` accessors in `source.py`.
+Do not place business variables in `ARGS_SETTINGS`. Input/config variables belong in `script.py` forms, `main.py` `VARIABLE_VALUES`, and typed `@property` accessors in `source.py`. Extracted output values must not be declared as variables; they must be discovered by runtime logic and emitted through logging, connector writes, or the appropriate output channel.
 # RPA Developer Skill 指南
 
 
