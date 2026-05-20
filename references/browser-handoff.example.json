@@ -11,14 +11,18 @@
       "action": "goto",
       "locator": null,
       "value": "https://example.com/",
-      "wait_for": "target page loaded"
+      "wait_for": "target page loaded",
+      "verified": true,
+      "evidence": "Browser reached https://example.com/ and observed the target page URL/title."
     },
     {
       "intent": "Perform the next required browser action",
       "action": "click",
       "locator": "page.get_by_role('button', name='Example')",
       "value": null,
-      "wait_for": "the expected UI state is visible"
+      "wait_for": "the expected UI state is visible",
+      "verified": true,
+      "evidence": "Browser observed a visible button with accessible name Example before clicking."
     }
   ],
   "assumptions": [

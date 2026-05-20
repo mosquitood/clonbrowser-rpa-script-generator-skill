@@ -11,7 +11,7 @@ Use this workflow when the user asks for any browser task that must become an RP
 
 1. Before starting page exploration, check that Codex has the upstream Browser skill from `plugin://browser@openai-bundled` available. Accept the installed skill names/chips `browser:browser`, `Browser`, `@browser`, or `@浏览器`. If it is not installed or not available in the current session, stop before exploration and tell the user to install or enable `plugin://browser@openai-bundled`.
 2. Use `@浏览器` / `browser:browser` first when page inspection, clicking, typing, screenshots, or element discovery is needed. Do not use generic web search, a separate ad hoc Playwright session, or another browser backend as the upstream exploration path unless the user explicitly asks for a fallback.
-3. Force headed mode for every upstream Browser run. Load the Browser skill, use the in-app/browser plugin surface, and make the browser visible before navigation by enabling the Browser visibility capability when it is available. If headed/visible mode cannot be enabled, stop and report that the Browser upstream is unavailable in the required mode.
+3. Force headed mode for every upstream Browser run. Load the Browser skill, create or claim a visible headed browser tab/window before navigation, and keep that visible browser surface as the only source of page observations. Do not complete discovery through headless Playwright, background content fetches, generic web search, HTTP requests, hidden tabs, or any browser backend that the user cannot watch. If headed/visible mode cannot be enabled and confirmed before the first navigation, stop and report that the Browser upstream is unavailable in the required mode.
 4. Treat the Browser step as an upstream dependency with an explicit status. Continue only when the Browser handoff contains `"status": "success"`.
 5. If the Browser handoff is missing, invalid, or has any status other than `success`, rerun the Browser step. Retry at most 3 total attempts.
 6. If all 3 Browser attempts fail, stop immediately and report the RPA generation as failed. Do not generate final RPA files from failed or partial Browser output.
@@ -22,10 +22,76 @@ Use this workflow when the user asks for any browser task that must become an RP
    - fill values and click order
    - waits, assertions, and known navigation boundaries
    - screenshots or trace notes when relevant
-9. Save or request the handoff in the JSON shape described by `references/browser-handoff-schema.md` when the task has more than a few steps.
-10. Validate the handoff with `scripts/validate_browser_handoff.py` before generating final RPA files. This validator must pass before RPA generation starts.
-11. After a valid successful handoff, automatically generate the RPA Editor NextGen standard files in the same task: `readme.md`, `script.py`, `source.py`, and `main.py`. Do not stop after printing, logging, summarizing, or reporting Browser results, and do not ask whether to generate scripts unless the user explicitly asks for exploration only.
-12. Keep Browser discovery code separate from final RPA code. Do not paste raw exploratory Playwright code directly into the final script unless it matches this framework's page-object conventions.
+9. Every locator, state assertion, extracted field, and interaction in the Browser handoff must be verified against real elements in the live page. Do not invent selectors, infer nonexistent buttons, or use placeholder locators from memory, documentation, prior runs, or generic site knowledge. If Browser cannot observe the element in the current page, the handoff must mark the attempt as failed or record the uncertainty in `warnings`; it must not report `status: success`.
+10. Save or request the handoff in the JSON shape described by `references/browser-handoff-schema.md` when the task has more than a few steps.
+11. Validate the handoff with `scripts/validate_browser_handoff.py` before generating final RPA files. This validator must pass before RPA generation starts.
+12. After a valid successful handoff, automatically generate the RPA Editor NextGen standard files in the same task: `readme.md`, `script.py`, `source.py`, and `main.py`. Do not stop after printing, logging, summarizing, or reporting Browser results, and do not ask whether to generate scripts unless the user explicitly asks for exploration only.
+13. Keep Browser discovery code separate from final RPA code. Do not paste raw exploratory Playwright code directly into the final script unless it matches this framework's page-object conventions.
+
+## Clonbrowser Launched Browser Rule
+
+When the user wants Browser exploration to use their Clonbrowser fingerprint browser, use only the already-started browser list. Do not query the full environment list as the source of runnable browsers, and do not launch a profile automatically.
+
+Use this endpoint:
+
+```bash
+curl -X GET "http://127.0.0.1:37073/v1/browsers/launched" -H "accept: application/json"
+```
+
+Selection rules:
+
+1. If the launched browser list is empty, stop before exploration and tell the user to start a Clonbrowser browser first.
+2. If exactly one launched browser is returned, use that browser.
+3. If multiple launched browsers are returned, ask the user to choose one by browser `name`. Use exact name matching; do not choose by array order.
+4. Read `remote_debugging_port` from the selected launched browser and treat `http://127.0.0.1:<remote_debugging_port>` as the CDP endpoint for that browser.
+5. Before Browser exploration starts, verify that the Browser upstream can actually use or attach to the selected CDP-backed browser. If Browser cannot see or attach to that backend, stop and report that the selected Clonbrowser instance is not available to the Browser upstream; do not fall back to the in-app browser unless the user explicitly allows it.
+
+Privacy and logging rules:
+
+- The Clonbrowser launched-browser response can contain accounts, passwords, proxy credentials, 2FA keys, cookies, extension metadata, and other sensitive data.
+- Never print, copy into handoff JSON, copy into generated RPA files, or summarize those sensitive fields.
+- When listing choices for the user, show only safe fields: `name`, `id`, `pid`, and `remote_debugging_port`.
+- Do not include Clonbrowser credentials, proxy credentials, cookies, tokens, or profile metadata in `SCRIPT_VARIABLES`, `VARIABLE_VALUES`, `readme.md`, logs, or the final response.
+
+## Forced Headed Browser Rule
+
+Every browser-to-RPA task must begin by explicitly opening or claiming a visible headed browser tab/window through the upstream Browser surface. The upstream handoff is not valid unless the live headed page was used for navigation, state-setting, extraction, and evidence collection.
+
+The handoff `playwright_python` example must launch headed mode explicitly when it includes browser launch code, for example `browser = p.chromium.launch(headless=False)`. Handoffs that include `headless=True`, omit headed launch mode while showing a launch call, or rely on non-visual page fetches must be treated as failed and retried, not converted into RPA files.
+
+## Synchronous Runtime Rule
+
+Generated RPA code must use the project's synchronous runtime style. Do not generate `async def`, `await`, async Playwright imports, async context managers, or coroutine-based helper methods in `main.py`, `script.py`, or `source.py`.
+
+The upstream Browser handoff must provide synchronous Playwright Python examples when it includes `playwright_python`. If the Browser exploration tool internally uses asynchronous automation, translate the handoff into synchronous Playwright-style steps before generating RPA code.
+
+Use synchronous framework calls such as `self.page.goto(...)`, `self.page.wait_for_load_state(...)`, `locator.wait_for(...)`, `self.human_click(...)`, and `self.type_text_by_random(...)`. Explicit waits are allowed and expected; fixed hard waits such as `time.sleep(...)` and `page.wait_for_timeout(...)` remain prohibited unless the framework exposes an approved randomized wait helper.
+
+## Interaction Pacing Rule
+
+After every page interaction that clicks, types, fills, presses, selects, checks, or navigates, generated `source.py` must call `self.random_sleep(min_seconds=..., max_seconds=...)` before continuing with the next meaningful browser action. Do not chain multiple element operations back to back without a randomized pause.
+
+Use task-appropriate ranges:
+
+- Lightweight UI interactions: `self.random_sleep(min_seconds=1, max_seconds=3)`
+- Navigation, submit, save, apply, or dialog-confirm actions: `self.random_sleep(min_seconds=2, max_seconds=5)`
+- Search or result-page transitions: `self.random_sleep(min_seconds=3, max_seconds=6)`
+
+Explicit waits such as `self.page.wait_for_load_state(...)` and `locator.wait_for(...)` are still required when the next page state must be confirmed, but they do not replace `self.random_sleep(...)`. The delivery gate `scripts/validate_generated_rpa.py` rejects generated `source.py` files where common page interaction calls are not followed shortly by `self.random_sleep(...)`.
+
+## Page Load Wait Rule
+
+Any generated code path that may trigger a page load or document navigation must call `self.page.wait_for_load_state(...)` shortly after the operation. This includes `self.page.goto(...)` and clicks, presses, or selections that submit a form, start a search, save/apply settings, confirm a dialog, continue to the next step, log in, or otherwise request a new page state.
+
+Use both mechanisms when both are relevant:
+
+```python
+self.human_click(submit_button)
+self.page.wait_for_load_state("domcontentloaded")
+self.random_sleep(min_seconds=2, max_seconds=5)
+```
+
+`self.random_sleep(...)` controls human pacing and anti-detection rhythm. It is not a substitute for `self.page.wait_for_load_state(...)`. `self.page.wait_for_load_state(...)` confirms the browser load lifecycle and is not a substitute for randomized pacing.
 
 ## Explicit State-Setting Rule
 
@@ -43,17 +109,22 @@ After every successful Browser handoff:
 
 1. Choose the output directory before writing files:
    - If the user gives a target script directory, write there.
-   - Otherwise, create a task-derived folder under the current workspace's `outputs/` directory, using a short lowercase hyphenated script name.
+   - Otherwise, create a task-derived folder under this skill root's `outputs/` directory, using a short lowercase hyphenated script name. For this repository, the default path shape is `D:\workspace\codex-plugins\rpa-skills\rpa-auto-generator-codex-skills\outputs\<script-name>\`.
+   - Do not write generated RPA files into the caller's unrelated working directory, a temporary directory, or another repo's `outputs/` directory unless the user explicitly gives that target path.
 2. Write all four required files: `readme.md`, `script.py`, `source.py`, and `main.py`.
 3. Ensure `script.py`, `source.py`, and `main.py` all contain the current task inputs and runtime configuration from the successful handoff. Do not hard-code desired result items, extracted result values, product names, titles, IDs, prices, or other page outputs as variables.
-4. Validate generated Python with `python -m py_compile` for `main.py`, `script.py`, and `source.py`; remove temporary `__pycache__` folders after validation.
-5. In the final response, list the generated file paths and validation result. If no files were generated, explicitly report the task as incomplete.
+4. Run `python scripts/validate_generated_rpa.py <output-dir>` from this skill root. This is the mandatory delivery gate and it must pass before the task can be reported complete. It validates required files, output location, handoff truth evidence, synchronous runtime usage, framework entrypoints, variable consistency, disallowed result variables, and Python syntax.
+5. If `validate_generated_rpa.py` fails for any reason, do not deliver the script and do not report success. Fix the generated files or rerun the Browser handoff, then run the validator again.
+6. Remove temporary `__pycache__` folders after validation.
+7. In the final response, list the generated file paths and the `validate_generated_rpa.py` result. If no files were generated or validation did not pass, explicitly report the task as incomplete.
 
 If a run only prints or returns extracted values after a successful handoff, continue working immediately and generate the RPA files before sending the final answer.
 
 ## Expected Browser Handoff
 
 The Browser handoff is an intermediate artifact. It should answer: "how to find the elements and what values to fill". It should not decide the final RPA framework structure.
+
+Each step must include `verified: true` and an `evidence` string describing the real page observation used to confirm that the element or state exists. Evidence can be a visible text snippet, role/name match, selected option state, URL/title confirmation, element count, extracted field sample, or screenshot/trace note. Generic claims such as "selector should exist" or "common Amazon selector" are not valid evidence.
 
 Minimal shape:
 
@@ -64,14 +135,16 @@ Minimal shape:
   "max_attempts": 3,
   "task": "Complete the requested browser workflow and collect the required output",
   "start_url": "https://example.com/",
-  "playwright_python": "...",
+  "playwright_python": "Synchronous Playwright Python only; no async/await.",
   "steps": [
     {
       "intent": "Open the required control",
       "action": "click",
       "locator": "page.get_by_role('button', name='...')",
       "value": null,
-      "wait_for": "the next required UI state is visible"
+      "wait_for": "the next required UI state is visible",
+      "verified": true,
+      "evidence": "Browser observed a visible button with the requested accessible name on the live page."
     }
   ],
   "assumptions": [],
@@ -88,6 +161,7 @@ Before generating any RPA files, validate the browser handoff. The handoff is us
 - `attempt` is between `1` and `3`.
 - `max_attempts` is exactly `3`.
 - `steps` is non-empty and contains enough locator/action detail to reproduce the browser task.
+- Every step has `verified: true` plus non-empty evidence from the live page; locator-based actions cannot use null or placeholder locators.
 
 If validation fails because the upstream browser step did not succeed, rerun the browser step and request a fresh handoff. Do not merge failed handoff data into the final RPA script. After 3 failed attempts, report failure with the last known blocker from `warnings` or `failure_reason`.
 ## RPA Generation Contract
@@ -98,7 +172,7 @@ After receiving the browser handoff, generate project-standard RPA code accordin
 
 Generated variables must represent inputs, runtime configuration, or output destinations only. Examples include start URL, search keywords, requested locale, requested delivery destination, category, sort/filter choices, row limits, window settings, connector settings, and output field mappings.
 
-Do not put desired result items or observed result values into `SCRIPT_VARIABLES`, `SCRIPT_FORMS`, `VARIABLE_VALUES`, `ARGS_SETTINGS`, or `VariableValue` properties. Result values include product names, listing titles, IDs, prices, URLs, extracted text, counts, scraped records, and any other data the RPA script is supposed to discover while running.
+Do not put desired result items or observed result values into `SCRIPT_VARIABLES`, `SCRIPT_FORMS`, `VARIABLE_VALUES`, `ARGS_SETTINGS`, or `FormateVariableValue` properties. Result values include product names, listing titles, IDs, prices, URLs, extracted text, counts, scraped records, and any other data the RPA script is supposed to discover while running.
 
 Use Browser handoff result values only as validation evidence and as guidance for selectors or extraction logic. The final `source.py` must reproduce the extraction at runtime and then report the discovered values through framework logging, business logging, connector output, or the task-appropriate output channel. Local `main.py` may provide input/config values needed to reproduce the run, but it must not pre-fill the expected extracted results.
 ## main.py Generation Standard
@@ -139,7 +213,7 @@ Adapt these placeholders for each generated script:
 Keep `BROWSER_CONFIG.platform`, `BROWSER_CONFIG.id`, default window variables, and `timeout=30000` unless the user explicitly requests different runtime settings. Always include input/config variables in `VARIABLE_VALUES` so local developer runs do not depend on external defaults. Never include site-specific or task-specific values in the skill itself; derive them only from the current user request and the successful handoff. Never include extracted outputs in `VARIABLE_VALUES`.
 ## source.py Variable Standard
 
-Generate `source.py` so runtime variables are read through `self.proxy.use(..., VariableValue).value()` properties instead of declaring variable placeholders inside `ARGS_SETTINGS` or relying on class attributes being injected.
+Generate `source.py` so runtime variables are read through `self.proxy.use(..., FormateVariableValue).value()` properties instead of declaring variable placeholders inside `ARGS_SETTINGS` or relying on class attributes being injected.
 
 `ARGS_SETTINGS` must contain only framework execution settings:
 
@@ -150,14 +224,14 @@ ARGS_SETTINGS = {
 }
 ```
 
-For every generated script variable, add a typed `@property` that reads from `VariableValue`:
+For every generated script variable, add a typed `@property` that reads from `FormateVariableValue`:
 
 ```python
-from app.core.runtime.core.autobot.component.values import VariableValue
+from app.core.runtime.core.autobot.component.values import FormateVariableValue
 
 @property
 def start_url(self) -> str:
-    return self.proxy.use("${start_url}", VariableValue).value()
+    return self.proxy.use("${start_url}", FormateVariableValue).value()
 ```
 
 For boolean variables, normalize string and boolean values:
@@ -165,13 +239,30 @@ For boolean variables, normalize string and boolean values:
 ```python
 @property
 def confirm_required(self) -> bool:
-    value = self.proxy.use("${confirm_required}", VariableValue).value()
+    value = self.proxy.use("${confirm_required}", FormateVariableValue).value()
     if isinstance(value, bool):
         return value
     return str(value).lower() in ("true", "1", "yes")
 ```
 
 Do not place business variables in `ARGS_SETTINGS`. Input/config variables belong in `script.py` forms, `main.py` `VARIABLE_VALUES`, and typed `@property` accessors in `source.py`. Extracted output values must not be declared as variables; they must be discovered by runtime logic and emitted through logging, connector writes, or the appropriate output channel.
+
+## Window Size Runtime Rule
+
+When generated scripts expose `resolution_options` and `window_size`, do not call `self.set_window_size_by_variable()` and do not call `self.set_window_size(*self.window_size)`. In this project, `window_size` may be delivered as a string such as `"1920x1080"`; unpacking that string passes one character per argument and raises `TypeError: set_window_size() takes 3 positional arguments but 10 were given`.
+
+Generate an explicit helper that parses the string into exactly two integers before calling `self.set_window_size(width, height)`:
+
+```python
+def apply_window_size(self) -> None:
+    if self.resolution_options != "preset":
+        return
+
+    width_text, height_text = str(self.window_size).lower().split("x", 1)
+    self.set_window_size(int(width_text), int(height_text))
+```
+
+Call that helper from `ready()` before navigation. This rule is enforced by `scripts/validate_generated_rpa.py`.
 # RPA Developer Skill 指南
 
 
@@ -618,7 +709,7 @@ WindowForm(name="window_size", required=True, CN="窗口大小", EN="Window Size
 
 def ready(self) -> bool:
 
-     self.set_window_size_by_variable()  # 必须调用
+     self.apply_window_size()
 
      self.page.goto(self.start_url)
 
@@ -1148,7 +1239,7 @@ if not _locator:
 
 | --- | --- |
 
-| `self.set_window_size_by_variable()` | **每个脚本 `ready()` 必须调用一次**，按 `${window_size}` / `${resolution_options}` 变量设置窗口（见 2.7） |
+| `self.set_window_size_by_variable()` | 不要在新生成脚本中调用；当 `${window_size}` 是 `"1920x1080"` 字符串时可能被错误解包为多个字符参数 |
 
 | `self.set_window_size(width, height)` | 直接通过 CDP 设置窗口大小 |
 
