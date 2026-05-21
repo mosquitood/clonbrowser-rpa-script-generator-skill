@@ -5,9 +5,39 @@ description: Develop RPA Editor NextGen automation scripts from Browser upstream
 
 # RPA Developer Skill
 
+## Requirement Intake Gate
+
+Before checking Clonbrowser, opening Browser, navigating to a page, or collecting local-debug paths, decompose the user's current request into a concrete URL-input collection requirement. Do this analysis yourself first; do not ask questions until after you have tried to form a complete requirement from the current message and project context.
+
+Supported requirement shape for this skill:
+
+- Input mode: URL input collection. The input is one or more explicit target URLs, a site URL to open directly, or a connector/file/table field that contains URLs. Search-keyword, prompt-only discovery, account-management, upload, posting, and non-URL workflow modes are outside the default supported mode unless the user gives enough detail to define them as a URL-driven collection script.
+- Target: the website/page/app URL and the page state to reach before collection.
+- Collection scope: which records to collect, such as first N visible items, every item from each input URL, one detail page per URL, or rows until no more results.
+- Output fields: the exact fields to extract or produce. Examples: title, author, price, like count, comment count, URL, status, screenshot path, or writeback message.
+- Input source details: fixed URL values, connector/table/file path, URL field name, row limit, filtering rule, and any per-row state needed by the script.
+- Output destination: business logger by default for exploratory collection; connector, Excel, file, or page writeback only when requested or clearly implied. If writeback is requested, require destination connector/table/file and field mapping.
+- Runtime and delivery: local debug root, script input directory, browser route, window settings, and any required login/account context.
+- Success criteria: the observable condition that makes the script complete, such as "collect 5 records", "write all extracted fields back to the output table", or "log one result per input URL".
+
+Continue without asking only when the requirement can be safely formed. Safe inference examples:
+
+- A request like "open https://example.com and collect the first 5 posts' title, author, likes, comments" supplies URL, scope, and fields; ask only for missing local-debug delivery paths if they are not already provided.
+- A request like "collect title and price from the URLs in this table" supplies URL-input mode and fields, but still requires the connector/table path and URL field if they are missing.
+
+Stop before local-debug setup and browser exploration when any missing or ambiguous item would change the generated script structure, data source, output contract, browser workflow, or success criteria. Ask concise follow-up questions in one batch. Prefer questions in this order:
+
+1. What is the URL input source: fixed URL(s), connector/table field, file, or another URL list?
+2. Which fields should the script extract or produce?
+3. What collection scope is required: first N items, all visible items, each input URL, pagination, or another rule?
+4. Where should results go: business logs, connector/table writeback, Excel/file, or page writeback?
+5. What local debug root and script input directory should receive the generated files?
+
+If the user asks for a non-URL workflow with incomplete details, do not invent a URL-input interpretation. Ask them to either provide the URL-input source or describe the non-URL workflow fully enough to define inputs, actions, outputs, and success criteria.
+
 ## Browser Handoff Workflow
 
-Start-of-task setup gate: before checking, opening, attaching to, or exploring any browser page, apply the Local Debug Generation Rule and collect both the local debug root and script input directory before browser exploration starts.
+Start-of-task setup gate: before checking, opening, attaching to, or exploring any browser page, first apply the Requirement Intake Gate. After the URL-input collection requirement is complete, apply the Local Debug Generation Rule and collect both the local debug root and script input directory before browser exploration starts.
 
 Self-contained execution rule: this skill must be executable from the current `SKILL.md`, `references/`, and `scripts/` files alone. Do not depend on Codex memory, prior chat summaries, previous successful runs, or remembered Browser backend state to decide the browser route. If the user says "do not use memory" or "不要使用记忆", that only forbids memory-derived assumptions; it does not relax any rule in this skill.
 
@@ -120,7 +150,7 @@ For every requested state-setting goal, require at least one `steps[]` entry who
 
 ## Local Debug Generation Rule
 
-At the very beginning of every browser-to-RPA task, before checking or opening any browser page, require the local debug root and the script input directory. This is a start-of-task setup gate, not a post-handoff decision. Do not ask whether local debugging should be used; this skill's default delivery route is local-debug delivery into the user's script input directory.
+After the Requirement Intake Gate has produced a complete URL-input collection requirement, and before checking or opening any browser page, require the local debug root and the script input directory. This is a pre-browser setup gate, not a post-handoff decision. Do not ask whether local debugging should be used; this skill's default delivery route is local-debug delivery into the user's script input directory.
 
 Treat any user-provided "debug directory", "debug root", "local debug directory", "local project root", "调试目录", "调试根目录", or equivalent path for running the generated script as the local debug root unless the user clearly labels it as the script input directory.
 
@@ -128,7 +158,7 @@ If the user labels a path as the script input directory, generated script direct
 
 After the local debug root is confirmed, require the user's script input directory before browser exploration starts. Do not invent or auto-choose a custom output directory. The generated files must be written directly into the confirmed script input directory.
 
-The local debug root and script input directory must be locked before browser exploration starts. Do not open Browser, check Clonbrowser, navigate to the target site, or create a handoff until this decision is complete. If either path is ambiguous, stop and ask for the missing path value first.
+The local debug root and script input directory must be locked before browser exploration starts. Do not open Browser, check Clonbrowser, navigate to the target site, or create a handoff until both the requirement and delivery paths are complete. If either path is ambiguous, stop and ask for the missing path value first.
 
 Required local-debug delivery rules:
 
