@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import argparse
 import re
 import subprocess
 import sys
@@ -42,6 +43,7 @@ RESULT_VALUE_PATTERNS = (
     re.compile(r"expected_.*(product|title|price|asin|url|text|count|record)", re.IGNORECASE),
     re.compile(r"(observed|extracted)_.*(product|title|price|asin|url|text|count|record)", re.IGNORECASE),
 )
+LAUNCHED_BROWSER_ID_PATTERN = re.compile(r"\b(?:launched browser )?id\s*[:=]\s*[\"']?(\d{6,})[\"']?\b", re.IGNORECASE)
 
 
 def fail(message: str) -> None:
@@ -58,17 +60,36 @@ def repo_root() -> Path:
 
 
 def ensure_output_dir(output_dir: Path) -> None:
-    root_outputs = repo_root() / "outputs"
+    fail("validate_generated_rpa.py requires --debug-root; output_dir must be the confirmed script input directory")
+
+
+def relative_to_root(path: Path, root: Path, label: str) -> Path:
+    try:
+        return path.resolve().relative_to(root.resolve())
+    except ValueError:
+        fail(f"{label} must be under debug root: {root.resolve()}")
+
+
+def ensure_debug_output_dir(output_dir: Path, debug_root: Path) -> Path:
     resolved_output = output_dir.resolve()
-    resolved_root_outputs = root_outputs.resolve()
+    resolved_debug_root = debug_root.resolve()
+    if not resolved_debug_root.is_dir():
+        fail(f"debug root directory does not exist: {debug_root}")
     if not resolved_output.is_dir():
         fail(f"output directory does not exist: {output_dir}")
-    if resolved_output == resolved_root_outputs:
-        fail("output directory must be a task-specific subdirectory under outputs")
-    try:
-        resolved_output.relative_to(resolved_root_outputs)
-    except ValueError:
-        fail(f"output directory must be under skill root outputs: {resolved_root_outputs}")
+    if resolved_output == resolved_debug_root:
+        fail("script input directory must be a child directory under debug root")
+
+    relative_output = relative_to_root(output_dir, debug_root, "output directory")
+    if not relative_output.parts:
+        fail("script input directory must be a child directory under debug root")
+    invalid_parts = [part for part in relative_output.parts if not part.isidentifier()]
+    if invalid_parts:
+        fail(
+            "debug script input directory must be importable as Python package parts; "
+            f"invalid path parts: {invalid_parts}"
+        )
+    return relative_output
 
 
 def ensure_required_files(output_dir: Path) -> dict[str, Path]:
@@ -170,6 +191,58 @@ def ensure_framework_contract(paths: dict[str, Path]) -> None:
         fail("source.py must use FormateVariableValue, not VariableValue, for runtime variables")
     if "SCRIPT_FORMS" not in script_text or "SCRIPT_VARIABLES" not in script_text:
         fail("script.py must define SCRIPT_FORMS and SCRIPT_VARIABLES")
+
+
+def browser_config_values(main_tree: ast.Module) -> tuple[str | None, str | None]:
+    for node in ast.walk(main_tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not isinstance(func, ast.Name) or func.id != "BrowserConfig":
+            continue
+        values: dict[str, str] = {}
+        for keyword in node.keywords:
+            if keyword.arg in {"platform", "id"} and isinstance(keyword.value, ast.Constant):
+                if isinstance(keyword.value.value, str):
+                    values[keyword.arg] = keyword.value.value
+        return values.get("platform"), values.get("id")
+    return None, None
+
+
+def handoff_launched_browser_id(handoff_path: Path) -> str:
+    text = read_text(handoff_path)
+    matches = LAUNCHED_BROWSER_ID_PATTERN.findall(text)
+    unique_matches = sorted(set(matches))
+    if not unique_matches:
+        fail("browser-handoff.json must include the selected launched browser id in backend evidence")
+    if len(unique_matches) > 1:
+        fail(f"browser-handoff.json contains multiple launched browser ids: {unique_matches}")
+    return unique_matches[0]
+
+
+def ensure_browser_config_contract(paths: dict[str, Path]) -> None:
+    main_tree = parse_python(paths["main.py"])
+    platform, browser_id = browser_config_values(main_tree)
+    expected_id = handoff_launched_browser_id(paths["browser-handoff.json"])
+    if platform != "cb-global":
+        fail('main.py BrowserConfig.platform must be exactly "cb-global"')
+    if browser_id != expected_id:
+        fail(f"main.py BrowserConfig.id must match selected launched browser id {expected_id!r}")
+
+
+def ensure_debug_import_contract(paths: dict[str, Path], relative_output: Path) -> None:
+    main_tree = parse_python(paths["main.py"])
+    expected_module = ".".join(relative_output.parts) + ".source"
+    source_imports = [
+        node.module
+        for node in ast.walk(main_tree)
+        if isinstance(node, ast.ImportFrom) and node.module and node.module.endswith(".source")
+    ]
+    if expected_module not in source_imports:
+        fail(
+            "main.py source import must be derived from the script input directory relative to debug root; "
+            f"expected from {expected_module} import <PageClassName>, found {source_imports or 'none'}"
+        )
 
 
 def ensure_runtime_guardrails(paths: dict[str, Path]) -> None:
@@ -337,16 +410,28 @@ def ensure_py_compile(paths: dict[str, Path]) -> None:
         fail(message)
 
 
-def main() -> int:
-    if len(sys.argv) != 2:
-        print("usage: validate_generated_rpa.py <output-dir>", file=sys.stderr)
-        return 2
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Validate generated RPA Editor NextGen output before delivery.")
+    parser.add_argument("output_dir", help="Generated script output directory. In debug mode, this is the script input directory.")
+    parser.add_argument(
+        "--debug-root",
+        help="Local debug root. When set, output_dir is the script input directory and main.py imports must match that path.",
+    )
+    return parser.parse_args()
 
-    output_dir = Path(sys.argv[1])
-    ensure_output_dir(output_dir)
+
+def main() -> int:
+    args = parse_args()
+    output_dir = Path(args.output_dir)
+    if not args.debug_root:
+        ensure_output_dir(output_dir)
+    debug_relative_output = ensure_debug_output_dir(output_dir, Path(args.debug_root))
     paths = ensure_required_files(output_dir)
     ensure_no_async(paths)
     ensure_framework_contract(paths)
+    ensure_browser_config_contract(paths)
+    if debug_relative_output is not None:
+        ensure_debug_import_contract(paths, debug_relative_output)
     ensure_runtime_guardrails(paths)
     ensure_load_state_after_potential_loads(paths)
     ensure_random_sleep_after_interactions(paths)

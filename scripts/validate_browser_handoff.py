@@ -37,6 +37,21 @@ ASYNC_TOKENS = ("async def", "await ", "async with", "async for")
 HEADLESS_TRUE_PATTERN = re.compile(r"headless\s*=\s*True\b")
 LAUNCH_CALL_PATTERN = re.compile(r"\b(?:chromium|firefox|webkit)\.launch\s*\(")
 HEADED_FALSE_PATTERN = re.compile(r"headless\s*=\s*False\b")
+SELECTED_IAB_BACKEND_PATTERN = re.compile(
+    r'(?:selected|chosen|using|backend|browser_backend|browser backend)[^.\n]{0,80}'
+    r'(?:type\s*[:=]\s*["\']?iab["\']?|in-app browser|Codex In-app Browser)',
+    re.IGNORECASE,
+)
+EXTENSION_BACKEND_PATTERN = re.compile(
+    r'\b(?:type\s*[:=]\s*["\']?extension["\']?|extension backend|Browser extension backend)\b',
+    re.IGNORECASE,
+)
+LAUNCHED_BROWSER_ID_PATTERN = re.compile(r"\b(?:launched browser )?id\s*[:=]\s*[\"']?(\d{6,})[\"']?\b", re.IGNORECASE)
+SENSITIVE_HANDOFF_PATTERN = re.compile(
+    r"\b(?:password|passwd|pwd|cookie|cookies|token|secret|credential|credentials|proxy[_-]?password|"
+    r"two[_ -]?factor|2fa|otp|private[_ -]?key|access[_ -]?key)\b",
+    re.IGNORECASE,
+)
 
 
 def fail(message: str) -> None:
@@ -90,6 +105,15 @@ def main() -> int:
     if LAUNCH_CALL_PATTERN.search(playwright_python) and not HEADED_FALSE_PATTERN.search(playwright_python):
         fail("playwright_python launch calls must explicitly include headless=False")
 
+    serialized_handoff = json.dumps(data, ensure_ascii=False)
+    if SELECTED_IAB_BACKEND_PATTERN.search(serialized_handoff):
+        fail("handoff must not use Codex In-app Browser/iab as the selected browser backend")
+    if SENSITIVE_HANDOFF_PATTERN.search(serialized_handoff):
+        fail("handoff must not include credentials, cookies, tokens, proxy secrets, 2FA data, or other sensitive browser profile data")
+
+    has_extension_backend_assert = False
+    has_launched_browser_id = False
+
     for index, step in enumerate(data["steps"]):
         check_type(f"steps[{index}]", step, dict)
         for key, expected in REQUIRED_STEP.items():
@@ -104,8 +128,20 @@ def main() -> int:
             fail(f"steps[{index}].verified must be true after real page verification")
         if not step["evidence"].strip():
             fail(f"steps[{index}].evidence must describe the real page observation")
+        if (
+            step["action"] == "assert"
+            and EXTENSION_BACKEND_PATTERN.search(step["evidence"])
+            and "backend" in f"{step['intent']} {step['evidence']}".lower()
+        ):
+            has_extension_backend_assert = True
+            has_launched_browser_id = bool(LAUNCHED_BROWSER_ID_PATTERN.search(step["evidence"]))
         if "fallbacks" in step:
             check_type(f"steps[{index}].fallbacks", step["fallbacks"], list)
+
+    if not has_extension_backend_assert:
+        fail("successful handoffs must include a verified assert step proving the selected non-iab Browser extension backend")
+    if not has_launched_browser_id:
+        fail("successful handoffs must include the selected launched browser id in the verified backend assert evidence")
 
     print("handoff valid")
     return 0
@@ -113,4 +149,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

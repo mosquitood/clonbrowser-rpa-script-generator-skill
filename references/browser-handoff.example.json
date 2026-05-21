@@ -7,6 +7,15 @@
   "playwright_python": "from playwright.sync_api import sync_playwright\n\nwith sync_playwright() as p:\n    browser = p.chromium.launch(headless=False)\n    page = browser.new_page()\n    page.goto('https://example.com/')\n    page.get_by_role('button', name='Example').click()\n",
   "steps": [
     {
+      "intent": "Verify selected Browser backend",
+      "action": "assert",
+      "locator": "Browser backend metadata",
+      "value": null,
+      "wait_for": "selected backend is extension",
+      "verified": true,
+      "evidence": "Selected Browser backend type=extension with selected launched browser id=1857483922118578205 and safe metadata only; it is the single launched Clonbrowser-backed Browser extension backend."
+    },
+    {
       "intent": "Open the target page",
       "action": "goto",
       "locator": null,

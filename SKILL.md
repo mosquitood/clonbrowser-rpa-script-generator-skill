@@ -7,6 +7,12 @@ description: Develop RPA Editor NextGen automation scripts from Browser upstream
 
 ## Browser Handoff Workflow
 
+Start-of-task setup gate: before checking, opening, attaching to, or exploring any browser page, apply the Local Debug Generation Rule and collect both the local debug root and script input directory before browser exploration starts.
+
+Self-contained execution rule: this skill must be executable from the current `SKILL.md`, `references/`, and `scripts/` files alone. Do not depend on Codex memory, prior chat summaries, previous successful runs, or remembered Browser backend state to decide the browser route. If the user says "do not use memory" or "不要使用记忆", that only forbids memory-derived assumptions; it does not relax any rule in this skill.
+
+Default browser route: for this skill, every browser exploration that will become an RPA script must first run the Clonbrowser launched-browser preflight in the "Clonbrowser Launched Browser Rule" below. This is the default even when the user only says "use this local skill", "本地 skill", or asks to open a website without naming Clonbrowser. Use Codex In-app Browser, local Chrome, or any other Browser backend only when the user explicitly says to use that non-Clonbrowser browser route in the current request.
+
 Use this workflow when the user asks for any browser task that must become an RPA script, for example: open a target site, select a category, fill fields, search, extract page data, or complete another browser workflow and convert the discovered steps into Playwright Python handoff data.
 
 1. Before starting page exploration, check that Codex has the upstream Browser skill from `plugin://browser@openai-bundled` available. Accept the installed skill names/chips `browser:browser`, `Browser`, `@browser`, or `@浏览器`. If it is not installed or not available in the current session, stop before exploration and tell the user to install or enable `plugin://browser@openai-bundled`.
@@ -30,7 +36,7 @@ Use this workflow when the user asks for any browser task that must become an RP
 
 ## Clonbrowser Launched Browser Rule
 
-When the user wants Browser exploration to use their Clonbrowser fingerprint browser, use only the already-started browser list. Do not query the full environment list as the source of runnable browsers, and do not launch a profile automatically.
+For this skill's default browser route, Browser exploration must use the single already-started Clonbrowser browser. Use only the launched-browser list. Do not query the full environment list as the source of runnable browsers, and do not launch a profile automatically.
 
 Use this endpoint:
 
@@ -38,19 +44,30 @@ Use this endpoint:
 curl -X GET "http://127.0.0.1:37073/v1/browsers/launched" -H "accept: application/json"
 ```
 
-Selection rules:
+Single-browser selection rules:
 
-1. If the launched browser list is empty, stop before exploration and tell the user to start a Clonbrowser browser first.
+1. If the launched browser list is empty, stop before exploration and tell the user to start the required Clonbrowser browser first. Then wait for the user's reply. After the user replies, continue only by checking `/v1/browsers/launched` again; "continue" never means switching to another browser path. Do not continue with Browser exploration in the same attempt, and do not use any already-connected Chrome extension backend, Codex In-app Browser, local Chrome profile, CDP endpoint, or generic Browser backend as a substitute.
 2. If exactly one launched browser is returned, use that browser.
-3. If multiple launched browsers are returned, ask the user to choose one by browser `name`. Use exact name matching; do not choose by array order.
-4. Read `remote_debugging_port` from the selected launched browser and treat `http://127.0.0.1:<remote_debugging_port>` as the CDP endpoint for that browser.
-5. Before Browser exploration starts, verify that the Browser upstream can actually use or attach to the selected CDP-backed browser. If Browser cannot see or attach to that backend, stop and report that the selected Clonbrowser instance is not available to the Browser upstream; do not fall back to the in-app browser unless the user explicitly allows it.
+3. If multiple launched browsers are returned, stop before exploration. Do not choose by name, id, array order, newest process, extension instance, or any other heuristic. Tell the user to close or stop all extra Clonbrowser instances so exactly one launched browser remains, then rerun the task.
+4. Do not close extra Clonbrowser instances automatically unless the user explicitly asks you to close them in the current turn. Closing browsers can interrupt logged-in sessions or active work.
+5. Read `remote_debugging_port` from the single launched browser and treat `http://127.0.0.1:<remote_debugging_port>` as the CDP endpoint for that browser.
+6. Preserve the selected launched browser `id` as safe handoff evidence. This id is not optional; generated `main.py` must use it as `BROWSER_CONFIG.id`.
+7. Before Browser exploration starts, verify that the Browser upstream can actually use or attach to the single launched Clonbrowser-backed Browser extension backend. If Browser cannot see or attach to that backend, stop and report that the selected Clonbrowser instance is not available to the Browser upstream; do not fall back to the in-app browser unless the user explicitly allows it.
+
+Browser backend selection rules:
+
+1. For this skill's default browser route, the Browser upstream must not call `agent.browsers.get("iab")`, must not create tabs in `type: "iab"`, and must not use Codex In-app Browser for exploration.
+2. Browser backend selection is allowed only after `/v1/browsers/launched` returns exactly one launched Clonbrowser browser. If the launched list is empty or has multiple items, do not inspect, reuse, or select any Browser backend; stop at the launched-list condition and wait for the user to fix the browser state.
+3. After reading `/v1/browsers/launched`, refresh Browser backends with `agent.browsers.list()` and select a `type: "extension"` backend that corresponds to the single launched Clonbrowser instance.
+4. Before opening the target site, prove that the selected backend is not `type: "iab"` by recording the selected Browser backend type, selected launched browser `id`, and safe metadata in the handoff evidence. Safe metadata only; do not include credentials or profile secrets.
+5. If the only available controllable backend is `type: "iab"`, stop immediately and report that the fingerprint browser is not connected to Browser. Do not open the target site in the in-app browser.
+6. If multiple non-iab extension backends are visible and the single launched Clonbrowser backend cannot be identified unambiguously, stop and ask the user to leave only the target Clonbrowser window running with the Browser Use extension enabled.
 
 Privacy and logging rules:
 
 - The Clonbrowser launched-browser response can contain accounts, passwords, proxy credentials, 2FA keys, cookies, extension metadata, and other sensitive data.
 - Never print, copy into handoff JSON, copy into generated RPA files, or summarize those sensitive fields.
-- When listing choices for the user, show only safe fields: `name`, `id`, `pid`, and `remote_debugging_port`.
+- When reporting launched browser state to the user, show only safe fields: `name`, `id`, `pid`, and `remote_debugging_port`.
 - Do not include Clonbrowser credentials, proxy credentials, cookies, tokens, or profile metadata in `SCRIPT_VARIABLES`, `VARIABLE_VALUES`, `readme.md`, logs, or the final response.
 
 ## Forced Headed Browser Rule
@@ -101,6 +118,32 @@ Do not accept a pre-existing matching label, selected option, URL parameter, coo
 
 For every requested state-setting goal, require at least one `steps[]` entry whose `intent` says it is re-applying that requested state. A handoff that only reports "already set" without an action attempt is incomplete and must be retried.
 
+## Local Debug Generation Rule
+
+At the very beginning of every browser-to-RPA task, before checking or opening any browser page, require the local debug root and the script input directory. This is a start-of-task setup gate, not a post-handoff decision. Do not ask whether local debugging should be used; this skill's default delivery route is local-debug delivery into the user's script input directory.
+
+Treat any user-provided "debug directory", "debug root", "local debug directory", "local project root", "调试目录", "调试根目录", or equivalent path for running the generated script as the local debug root unless the user clearly labels it as the script input directory.
+
+If the user labels a path as the script input directory, generated script directory, or generated script subdirectory, treat that path as the script input directory. The script input directory is the final write location, not a parent directory for another generated folder.
+
+After the local debug root is confirmed, require the user's script input directory before browser exploration starts. Do not invent or auto-choose a custom output directory. The generated files must be written directly into the confirmed script input directory.
+
+The local debug root and script input directory must be locked before browser exploration starts. Do not open Browser, check Clonbrowser, navigate to the target site, or create a handoff until this decision is complete. If either path is ambiguous, stop and ask for the missing path value first.
+
+Required local-debug delivery rules:
+
+1. Require a local debug root directory before writing files. If the user has not provided one, stop and ask for the local debug root; do not write into the skill `outputs/` directory as a substitute.
+2. Require the script input directory before browser exploration starts. If the user has not provided it, stop and ask for the script input directory; do not choose a task-derived folder or use the skill `outputs/` directory as a substitute.
+3. The script input directory may be provided as an absolute path under the local debug root, or as a path relative to the local debug root. Resolve it to a full path before writing files.
+4. The actual output directory must be exactly the confirmed script input directory. Write `readme.md`, `script.py`, `source.py`, `main.py`, and `browser-handoff.json` directly inside that directory. Do not create an extra task-named subdirectory under it.
+5. The script input directory must be importable as Python package parts relative to the local debug root: each path segment must be a valid Python identifier. If it is not importable, stop and ask for an importable script input directory instead of silently changing it.
+6. Derive `main.py`'s `source.py` import from the script input directory relative to the debug root. Split the relative path into Python package parts and append `.source`. For a script input directory `scripts\kuajingvs\amazon`, `main.py` must use `from scripts.kuajingvs.amazon.source import <PageClassName>`.
+7. The local debug command must be run from the local debug root with `uv run <script_input_directory>\main.py`. Example: from `D:\project`, run `uv run .\scripts\kuajingvs\amazon\main.py`.
+8. When validating local-debug output, run `python scripts/validate_generated_rpa.py <script-input-dir> --debug-root <local-debug-root>` from this skill root before running the local debug command.
+9. If validation passes, run the local debug command and report the command, working directory, and result. If validation fails, fix the generated files first and do not run local debug.
+
+If the user explicitly refuses local-debug delivery, stop and ask for a delivery location that preserves this skill's required local debug root and script input directory contract. Do not silently fall back to the skill `outputs/` directory.
+
 ## Completion Gate
 
 A browser-to-RPA task is complete only after the final RPA files have been written and validated. Treat printed product names, extracted page data, screenshots, or a successful Browser handoff as intermediate evidence, not as the final deliverable.
@@ -108,12 +151,12 @@ A browser-to-RPA task is complete only after the final RPA files have been writt
 After every successful Browser handoff:
 
 1. Choose the output directory before writing files:
-   - If the user gives a target script directory, write there.
-   - Otherwise, create a task-derived folder under this skill root's `outputs/` directory, using a short lowercase hyphenated script name. For this repository, the default path shape is `D:\workspace\codex-plugins\rpa-skills\rpa-auto-generator-codex-skills\outputs\<script-name>\`.
-   - Do not write generated RPA files into the caller's unrelated working directory, a temporary directory, or another repo's `outputs/` directory unless the user explicitly gives that target path.
+   - Use the Local Debug Generation Rule decision made at task start. The output directory must be exactly the confirmed script input directory and must follow the input-directory/import rules in that section.
+   - Do not create or use a task-derived `outputs/` folder when local debug root or script input directory is missing. Stop and ask for the missing path instead.
+   - Do not write generated RPA files into the caller's unrelated working directory, a temporary directory, or another repo's `outputs/` directory.
 2. Write all four required files: `readme.md`, `script.py`, `source.py`, and `main.py`.
 3. Ensure `script.py`, `source.py`, and `main.py` all contain the current task inputs and runtime configuration from the successful handoff. Do not hard-code desired result items, extracted result values, product names, titles, IDs, prices, or other page outputs as variables.
-4. Run `python scripts/validate_generated_rpa.py <output-dir>` from this skill root. This is the mandatory delivery gate and it must pass before the task can be reported complete. It validates required files, output location, handoff truth evidence, synchronous runtime usage, framework entrypoints, variable consistency, disallowed result variables, and Python syntax.
+4. Run `python scripts/validate_generated_rpa.py <script-input-dir> --debug-root <local-debug-root>` from this skill root. This is the mandatory delivery gate and it must pass before the task can be reported complete. It validates required files, output location, handoff truth evidence, synchronous runtime usage, framework entrypoints, variable consistency, disallowed result variables, and Python syntax.
 5. If `validate_generated_rpa.py` fails for any reason, do not deliver the script and do not report success. Fix the generated files or rerun the Browser handoff, then run the validator again.
 6. Remove temporary `__pycache__` folders after validation.
 7. In the final response, list the generated file paths and the `validate_generated_rpa.py` result. If no files were generated or validation did not pass, explicitly report the task as incomplete.
@@ -210,7 +253,19 @@ Adapt these placeholders for each generated script:
 - `<PageClassName>`: page-object class from `source.py`, derived from the current task.
 - `<variable_name>` and `<task_value>`: input/config variables required by the generated script, not extracted output values.
 
+When local debugging is confirmed, the `main.py` import path is not chosen independently. It must be derived from the script input directory relative to the local debug root. Convert path separators to dots and append `.source`; for example, `scripts\kuajingvs\amazon` becomes `from scripts.kuajingvs.amazon.source import <PageClassName>`. The local debug command must be run from the debug root as `uv run .\scripts\kuajingvs\amazon\main.py` for that example.
+
 Keep `BROWSER_CONFIG.platform`, `BROWSER_CONFIG.id`, default window variables, and `timeout=30000` unless the user explicitly requests different runtime settings. Always include input/config variables in `VARIABLE_VALUES` so local developer runs do not depend on external defaults. Never include site-specific or task-specific values in the skill itself; derive them only from the current user request and the successful handoff. Never include extracted outputs in `VARIABLE_VALUES`.
+For this Clonbrowser route, `BROWSER_CONFIG` is not a free choice. Always generate:
+
+```python
+BROWSER_CONFIG = BrowserConfig(
+    platform="cb-global",
+    id="<selected_launched_browser_id>",
+)
+```
+
+`platform` must be exactly `"cb-global"`. `id` must be the `id` field from the single launched browser returned by `/v1/browsers/launched` and recorded in the successful browser handoff evidence. Do not use Browser extension instance ids, remote debugging ports, profile names, `kv`, or any remembered/default id.
 ## source.py Variable Standard
 
 Generate `source.py` so runtime variables are read through `self.proxy.use(..., FormateVariableValue).value()` properties instead of declaring variable placeholders inside `ARGS_SETTINGS` or relying on class attributes being injected.
