@@ -52,6 +52,11 @@ SENSITIVE_HANDOFF_PATTERN = re.compile(
     r"two[_ -]?factor|2fa|otp|private[_ -]?key|access[_ -]?key)\b",
     re.IGNORECASE,
 )
+CDP_FALLBACK_PATTERN = re.compile(
+    r"\b(?:connect_over_cdp|remote_debugging_port|webSocketDebuggerUrl|debugger url|debugging port|"
+    r"CDP endpoint|raw CDP|Chrome DevTools Protocol)\b",
+    re.IGNORECASE,
+)
 
 
 def fail(message: str) -> None:
@@ -108,6 +113,8 @@ def main() -> int:
     serialized_handoff = json.dumps(data, ensure_ascii=False)
     if SELECTED_IAB_BACKEND_PATTERN.search(serialized_handoff):
         fail("handoff must not use Codex In-app Browser/iab as the selected browser backend")
+    if CDP_FALLBACK_PATTERN.search(serialized_handoff):
+        fail("handoff must not use raw CDP, remote debugging ports, or Playwright connect_over_cdp as a Browser substitute")
     if SENSITIVE_HANDOFF_PATTERN.search(serialized_handoff):
         fail("handoff must not include credentials, cookies, tokens, proxy secrets, 2FA data, or other sensitive browser profile data")
 
