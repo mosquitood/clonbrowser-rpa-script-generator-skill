@@ -19,6 +19,13 @@ git clone https://gitlab.kuajingvs.com/clonbrowser-cloud-v3/clonbrowser/rpa-edit
 - 安装环境
   - 参照仓库 readme
 
+- 下载 OpenAPI 服务包
+- windows地址：https://kuajingvs.oss-cn-qingdao.aliyuncs.com/client/resources/open-api-win.zip
+- mac地址：https://kuajingvs.oss-cn-qingdao.aliyuncs.com/client/resources/openapi-mac-m1.zip
+- 内部有帮助文档 可通过帮助文档配置文件 需要KV账号下的session中 存在 mark OPEN_API
+- 解压后将内部文件夹放入%appdata%/kuajingvsData/services/ 文件夹下 重启客户端 即可在 https://pre.kuajingvs.com/openapi 查看到对应的服务
+
+
 ### 如何使用
 
 - 使用在会话中 @Rpa Developer：{脚本需求} 回车即可。
