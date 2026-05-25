@@ -7,7 +7,7 @@ description: Develop RPA Editor NextGen automation scripts from Browser upstream
 
 ## Requirement Intake Gate
 
-Before checking Clonbrowser, opening Browser, navigating to a page, or collecting local-debug paths, decompose the user's current request into a concrete URL-input collection requirement. Do this analysis yourself first; do not ask questions until after you have tried to form a complete requirement from the current message and project context.
+Before checking KV (Kuajingvs), opening Browser, navigating to a page, or collecting local-debug paths, decompose the user's current request into a concrete URL-input collection requirement. Do this analysis yourself first; do not ask questions until after you have tried to form a complete requirement from the current message and project context.
 
 Supported requirement shape for this skill:
 
@@ -41,7 +41,7 @@ Start-of-task setup gate: before checking, opening, attaching to, or exploring a
 
 Self-contained execution rule: this skill must be executable from the current `SKILL.md`, `references/`, and `scripts/` files alone. Do not depend on Codex memory, prior chat summaries, previous successful runs, or remembered Browser backend state to decide the browser route. If the user says "do not use memory" or "不要使用记忆", that only forbids memory-derived assumptions; it does not relax any rule in this skill.
 
-Default browser route: for this skill, every browser exploration that will become an RPA script must first run the Clonbrowser launched-browser preflight in the "Clonbrowser Launched Browser Rule" below, then use the upstream Browser skill from `plugin://browser@openai-bundled`. This is the default even when the user only says "use this local skill", "本地 skill", or asks to open a website without naming Clonbrowser or Browser. Do not replace Browser with Codex In-app Browser, local Chrome, raw CDP, Playwright `connect_over_cdp`, remote debugging port automation, HTTP fetching, or any other browser route.
+Default browser route: for this skill, every browser exploration that will become an RPA script must first run the KV dynamic-browser preflight in the "KV Dynamic Browser Rule" below, then use the upstream Browser skill from `plugin://browser@openai-bundled`. This is the default even when the user only says "use this local skill", "本地 skill", or asks to open a website without naming KV or Browser. Do not replace Browser with Codex In-app Browser, local Chrome, raw CDP, Playwright `connect_over_cdp`, remote debugging port automation, HTTP fetching, or any other browser route.
 
 Browser discovery rule: the user is not required to explicitly mention `@浏览器`, `@browser`, or `plugin://browser@openai-bundled` in each task. This skill must discover Browser availability from the current Codex skills/plugins context. Treat Browser as available when the current session lists `browser:browser`, `Browser`, `@browser`, `@浏览器`, or the Browser plugin. Do not claim Browser is unavailable just because the user did not mention it in the prompt.
 
@@ -66,42 +66,70 @@ Use this workflow when the user asks for any browser task that must become an RP
 12. After a valid successful handoff, automatically generate the RPA Editor NextGen standard files in the same task: `readme.md`, `script.py`, `source.py`, and `main.py`. Do not stop after printing, logging, summarizing, or reporting Browser results, and do not ask whether to generate scripts unless the user explicitly asks for exploration only.
 13. Keep Browser discovery code separate from final RPA code. Do not paste raw exploratory Playwright code directly into the final script unless it matches this framework's page-object conventions.
 
-## Clonbrowser Launched Browser Rule
+## KV Dynamic Browser Rule
 
-For this skill's default browser route, Browser exploration must use the single already-started Clonbrowser browser. Use only the launched-browser list. Do not query the full environment list as the source of runnable browsers, and do not launch a profile automatically.
+For this skill's default browser route, Browser exploration must use the single already-started KV (Kuajingvs) dynamic browser. Discover the local KV OpenAPI endpoint from the current computer's `KuajingVSCore` process list, then use only the dynamic-browser list returned by that endpoint. Do not query a full environment list as the source of runnable browsers, and do not launch a profile automatically.
 
-Use this endpoint:
+Endpoint discovery:
+
+1. Search the current computer's process list for processes whose process name or command line contains `KuajingVSCore`.
+2. Extract the value immediately following the `--client-server` command-line argument. That value is the local KV OpenAPI endpoint, for example `http://127.0.0.1:<port>`.
+3. If no `KuajingVSCore` process with `--client-server` is found, stop before exploration and tell the user to start KV first.
+4. If multiple different `--client-server` endpoints are found, stop before exploration and ask the user to leave only the target KV runtime running, or provide the intended endpoint. Do not guess by process order, PID, or newest process.
+
+After discovering the endpoint, call:
 
 ```bash
-curl -X GET "http://127.0.0.1:37073/v1/browsers/launched" -H "accept: application/json"
+curl -X GET "<client-server-endpoint>/v2/dynamic-browsers" -H "accept: application/json"
+```
+
+Expected response shape:
+
+```json
+{
+  "model": "browser.list",
+  "data": [
+    {
+      "model": "dynamicBrowser.info",
+      "id": "shop_d8364e1dd96c4c15a9c6b996cb372224",
+      "extra": {
+        "brand": "chrome",
+        "shop_name": "中台",
+        "shop_new_id": "1857483922122772542"
+      },
+      "remote_debugging_port": 57008,
+      "pid": 12864
+    }
+  ]
+}
 ```
 
 Single-browser selection rules:
 
-1. If the launched browser list is empty, stop before exploration and tell the user to start the required Clonbrowser browser first. Then wait for the user's reply. After the user replies, continue only by checking `/v1/browsers/launched` again; "continue" never means switching to another browser path. Do not continue with Browser exploration in the same attempt, and do not use any already-connected Chrome extension backend, Codex In-app Browser, local Chrome profile, CDP endpoint, or generic Browser backend as a substitute.
-2. If exactly one launched browser is returned, use that browser.
-3. If multiple launched browsers are returned, stop before exploration. Do not choose by name, id, array order, newest process, extension instance, or any other heuristic. Tell the user to close or stop all extra Clonbrowser instances so exactly one launched browser remains, then rerun the task.
-4. Do not close extra Clonbrowser instances automatically unless the user explicitly asks you to close them in the current turn. Closing browsers can interrupt logged-in sessions or active work.
-5. Read `remote_debugging_port` from the single launched browser only as safe diagnostic metadata. Do not use `http://127.0.0.1:<remote_debugging_port>`, a websocket debugger URL, or Playwright `connect_over_cdp` as the automation path.
-6. Preserve the selected launched browser `id` as safe handoff evidence. This id is not optional; generated `main.py` must use it as `BROWSER_CONFIG.id`.
-7. Before Browser exploration starts, verify that the Browser upstream can actually use or attach to the single launched Clonbrowser-backed Browser extension backend. If Browser cannot see or attach to that backend, stop and report that the selected Clonbrowser instance is not available to the Browser upstream; do not fall back to in-app browser, raw CDP, remote debugging port automation, local Chrome, or generic Playwright.
+1. If the dynamic browser list is empty, stop before exploration and tell the user to start the required KV browser first. Then wait for the user's reply. After the user replies, continue only by rediscovering the KV endpoint and checking `/v2/dynamic-browsers` again; "continue" never means switching to another browser path. Do not continue with Browser exploration in the same attempt, and do not use any already-connected Chrome extension backend, Codex In-app Browser, local Chrome profile, CDP endpoint, or generic Browser backend as a substitute.
+2. If exactly one dynamic browser is returned, use that browser.
+3. If multiple dynamic browsers are returned, stop before exploration. Do not choose by shop name, id, `shop_new_id`, array order, newest process, extension instance, or any other heuristic. Tell the user to close or stop all extra KV browser instances so exactly one dynamic browser remains, then rerun the task.
+4. Do not close extra KV browser instances automatically unless the user explicitly asks you to close them in the current turn. Closing browsers can interrupt logged-in sessions or active work.
+5. Read `remote_debugging_port` from the single dynamic browser only as safe diagnostic metadata. Do not use `http://127.0.0.1:<remote_debugging_port>`, a websocket debugger URL, or Playwright `connect_over_cdp` as the automation path.
+6. Preserve the selected dynamic browser `extra.shop_new_id` as safe handoff evidence. This value is not optional; generated `main.py` must use it as `BROWSER_CONFIG.id`.
+7. Before Browser exploration starts, verify that the Browser upstream can actually use or attach to the single KV-backed Browser extension backend. If Browser cannot see or attach to that backend, stop and report that the selected KV browser is not available to the Browser upstream; do not fall back to in-app browser, raw CDP, remote debugging port automation, local Chrome, or generic Playwright.
 
 Browser backend selection rules:
 
 1. For this skill's default browser route, the Browser upstream must not call `agent.browsers.get("iab")`, must not create tabs in `type: "iab"`, and must not use Codex In-app Browser for exploration.
-2. Browser backend selection is allowed only after `/v1/browsers/launched` returns exactly one launched Clonbrowser browser. If the launched list is empty or has multiple items, do not inspect, reuse, or select any Browser backend; stop at the launched-list condition and wait for the user to fix the browser state.
-3. After reading `/v1/browsers/launched`, refresh Browser backends with `agent.browsers.list()` and select a `type: "extension"` backend that corresponds to the single launched Clonbrowser instance.
-4. Before opening the target site, prove that the selected backend is not `type: "iab"` by recording the selected Browser backend type, selected launched browser `id`, and safe metadata in the handoff evidence. Safe metadata only; do not include credentials or profile secrets.
+2. Browser backend selection is allowed only after `/v2/dynamic-browsers` returns exactly one KV dynamic browser. If the dynamic browser list is empty or has multiple items, do not inspect, reuse, or select any Browser backend; stop at the dynamic-browser condition and wait for the user to fix the browser state.
+3. After reading `/v2/dynamic-browsers`, refresh Browser backends with `agent.browsers.list()` and select a `type: "extension"` backend that corresponds to the single KV browser.
+4. Before opening the target site, prove that the selected backend is not `type: "iab"` by recording the selected Browser backend type, selected dynamic browser `extra.shop_new_id`, and safe metadata in the handoff evidence. Safe metadata only; do not include credentials or profile secrets.
 5. If the only available controllable backend is `type: "iab"`, stop immediately and report that the fingerprint browser is not connected to Browser. Do not open the target site in the in-app browser.
 6. If Browser runtime or `agent.browsers.list()` is not available in the current session, stop immediately and report that the upstream Browser skill is unavailable. Do not continue through CDP, Playwright, HTTP requests, or another tool.
-7. If multiple non-iab extension backends are visible and the single launched Clonbrowser backend cannot be identified unambiguously, stop and ask the user to leave only the target Clonbrowser window running with the Browser Use extension enabled.
+7. If multiple non-iab extension backends are visible and the single KV backend cannot be identified unambiguously, stop and ask the user to leave only the target KV window running with the Browser Use extension enabled.
 
 Privacy and logging rules:
 
-- The Clonbrowser launched-browser response can contain accounts, passwords, proxy credentials, 2FA keys, cookies, extension metadata, and other sensitive data.
+- The KV process command line and dynamic-browser response can contain accounts, passwords, proxy credentials, 2FA keys, cookies, extension metadata, filesystem paths, proxy URLs, webdriver paths, and other sensitive data.
 - Never print, copy into handoff JSON, copy into generated RPA files, or summarize those sensitive fields.
-- When reporting launched browser state to the user, show only safe fields: `name`, `id`, `pid`, and `remote_debugging_port`.
-- Do not include Clonbrowser credentials, proxy credentials, cookies, tokens, or profile metadata in `SCRIPT_VARIABLES`, `VARIABLE_VALUES`, `readme.md`, logs, or the final response.
+- When reporting dynamic browser state to the user, show only safe fields: top-level `id`, `pid`, `remote_debugging_port`, `extra.brand`, `extra.shop_name`, and `extra.shop_new_id`.
+- Do not include KV credentials, proxy credentials, cookies, tokens, local user data paths, webdriver paths, profile metadata, or raw process command lines in `SCRIPT_VARIABLES`, `VARIABLE_VALUES`, `readme.md`, logs, or the final response.
 
 ## Forced Headed Browser Rule
 
@@ -161,7 +189,7 @@ If the user labels a path as the script input directory, generated script direct
 
 After the local debug root is confirmed, require the user's script input directory before browser exploration starts. Do not invent or auto-choose a custom output directory. The generated files must be written directly into the confirmed script input directory.
 
-The local debug root and script input directory must be locked before browser exploration starts. Do not open Browser, check Clonbrowser, navigate to the target site, or create a handoff until both the requirement and delivery paths are complete. If either path is ambiguous, stop and ask for the missing path value first.
+The local debug root and script input directory must be locked before browser exploration starts. Do not open Browser, check KV, navigate to the target site, or create a handoff until both the requirement and delivery paths are complete. If either path is ambiguous, stop and ask for the missing path value first.
 
 Required local-debug delivery rules:
 
@@ -289,16 +317,16 @@ Adapt these placeholders for each generated script:
 When local debugging is confirmed, the `main.py` import path is not chosen independently. It must be derived from the script input directory relative to the local debug root. Convert path separators to dots and append `.source`; for example, `scripts\kuajingvs\amazon` becomes `from scripts.kuajingvs.amazon.source import <PageClassName>`. The local debug command must be run from the debug root as `uv run .\scripts\kuajingvs\amazon\main.py` for that example.
 
 Keep `BROWSER_CONFIG.platform`, `BROWSER_CONFIG.id`, default window variables, and `timeout=30000` unless the user explicitly requests different runtime settings. Always include input/config variables in `VARIABLE_VALUES` so local developer runs do not depend on external defaults. Never include site-specific or task-specific values in the skill itself; derive them only from the current user request and the successful handoff. Never include extracted outputs in `VARIABLE_VALUES`.
-For this Clonbrowser route, `BROWSER_CONFIG` is not a free choice. Always generate:
+For this KV route, `BROWSER_CONFIG` is not a free choice. Always generate:
 
 ```python
 BROWSER_CONFIG = BrowserConfig(
-    platform="cb-global",
-    id="<selected_launched_browser_id>",
+    platform="kv",
+    id="<selected_shop_new_id>",
 )
 ```
 
-`platform` must be exactly `"cb-global"`. `id` must be the `id` field from the single launched browser returned by `/v1/browsers/launched` and recorded in the successful browser handoff evidence. Do not use Browser extension instance ids, remote debugging ports, profile names, `kv`, or any remembered/default id.
+`platform` must be exactly `"kv"`. `id` must be the `extra.shop_new_id` field from the single KV dynamic browser returned by `/v2/dynamic-browsers` and recorded in the successful browser handoff evidence. Do not use Browser extension instance ids, remote debugging ports, top-level dynamic browser ids, shop names, process ids, or any remembered/default id.
 ## source.py Variable Standard
 
 Generate `source.py` so runtime variables are read through `self.proxy.use(..., FormateVariableValue).value()` properties instead of declaring variable placeholders inside `ARGS_SETTINGS` or relying on class attributes being injected.

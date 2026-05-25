@@ -43,7 +43,10 @@ RESULT_VALUE_PATTERNS = (
     re.compile(r"expected_.*(product|title|price|asin|url|text|count|record)", re.IGNORECASE),
     re.compile(r"(observed|extracted)_.*(product|title|price|asin|url|text|count|record)", re.IGNORECASE),
 )
-LAUNCHED_BROWSER_ID_PATTERN = re.compile(r"\b(?:launched browser )?id\s*[:=]\s*[\"']?(\d{6,})[\"']?\b", re.IGNORECASE)
+SHOP_NEW_ID_PATTERN = re.compile(
+    r"\b(?:extra\.)?shop_new_id\s*[:=]\s*[\"']?([A-Za-z0-9_-]{6,})[\"']?\b",
+    re.IGNORECASE,
+)
 
 
 def fail(message: str) -> None:
@@ -209,25 +212,25 @@ def browser_config_values(main_tree: ast.Module) -> tuple[str | None, str | None
     return None, None
 
 
-def handoff_launched_browser_id(handoff_path: Path) -> str:
+def handoff_shop_new_id(handoff_path: Path) -> str:
     text = read_text(handoff_path)
-    matches = LAUNCHED_BROWSER_ID_PATTERN.findall(text)
+    matches = SHOP_NEW_ID_PATTERN.findall(text)
     unique_matches = sorted(set(matches))
     if not unique_matches:
-        fail("browser-handoff.json must include the selected launched browser id in backend evidence")
+        fail("browser-handoff.json must include the selected KV dynamic browser extra.shop_new_id in backend evidence")
     if len(unique_matches) > 1:
-        fail(f"browser-handoff.json contains multiple launched browser ids: {unique_matches}")
+        fail(f"browser-handoff.json contains multiple KV dynamic browser shop_new_id values: {unique_matches}")
     return unique_matches[0]
 
 
 def ensure_browser_config_contract(paths: dict[str, Path]) -> None:
     main_tree = parse_python(paths["main.py"])
     platform, browser_id = browser_config_values(main_tree)
-    expected_id = handoff_launched_browser_id(paths["browser-handoff.json"])
-    if platform != "cb-global":
-        fail('main.py BrowserConfig.platform must be exactly "cb-global"')
+    expected_id = handoff_shop_new_id(paths["browser-handoff.json"])
+    if platform != "kv":
+        fail('main.py BrowserConfig.platform must be exactly "kv"')
     if browser_id != expected_id:
-        fail(f"main.py BrowserConfig.id must match selected launched browser id {expected_id!r}")
+        fail(f"main.py BrowserConfig.id must match selected KV dynamic browser shop_new_id {expected_id!r}")
 
 
 def ensure_debug_import_contract(paths: dict[str, Path], relative_output: Path) -> None:
