@@ -3,9 +3,18 @@
 - Clonbrowser 登录之后，打开要使用的Profile，安装 Codex 插件 (hehggadaopoacecdllhhajmbjkdcmajg)（切记是ChatGPT支持访问的地域）。
 - Codex 安装技能  [https://github.com/mosquitood/clonbrowser-rpa-script-generator-skill.git](https://github.com/mosquitood/clonbrowser-rpa-script-generator-skill.git)
 
+- clonbrowser
 ```python
     python C:\Users\{你的用户名}\.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py `
     --repo mosquitood/clonbrowser-rpa-script-generator-skill `
+    -- ref master `
+    --path . --name clonbrowser-rpa-script-generator
+```
+- kuajingvs
+```python
+    python C:\Users\{你的用户名}\.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py `
+    --repo mosquitood/clonbrowser-rpa-script-generator-skill `
+    -- ref kuajingvs `
     --path . --name clonbrowser-rpa-script-generator
 ```
 
