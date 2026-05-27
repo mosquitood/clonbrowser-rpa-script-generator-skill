@@ -6,7 +6,7 @@
 ```python
     python C:\Users\{你的用户名}\.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py `
     --repo mosquitood/clonbrowser-rpa-script-generator-skill `
-    --path .
+    --path . --name clonbrowser-rpa-script-generator
 ```
 
 - 下载 Clonbrowser RPA 调试工具
