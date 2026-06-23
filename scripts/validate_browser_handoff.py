@@ -46,10 +46,6 @@ EXTENSION_BACKEND_PATTERN = re.compile(
     r'\b(?:type\s*[:=]\s*["\']?extension["\']?|extension backend|Browser extension backend)\b',
     re.IGNORECASE,
 )
-SHOP_NEW_ID_PATTERN = re.compile(
-    r"\b(?:extra\.)?shop_new_id\s*[:=]\s*[\"']?([A-Za-z0-9_-]{6,})[\"']?\b",
-    re.IGNORECASE,
-)
 SENSITIVE_HANDOFF_PATTERN = re.compile(
     r"\b(?:password|passwd|pwd|cookie|cookies|token|secret|credential|credentials|proxy[_-]?password|"
     r"two[_ -]?factor|2fa|otp|private[_ -]?key|access[_ -]?key|user_data_dir|webdriver_path|"
@@ -123,8 +119,6 @@ def main() -> int:
         fail("handoff must not include credentials, cookies, tokens, proxy secrets, 2FA data, or other sensitive browser profile data")
 
     has_extension_backend_assert = False
-    has_shop_new_id = False
-
     for index, step in enumerate(data["steps"]):
         check_type(f"steps[{index}]", step, dict)
         for key, expected in REQUIRED_STEP.items():
@@ -145,14 +139,11 @@ def main() -> int:
             and "backend" in f"{step['intent']} {step['evidence']}".lower()
         ):
             has_extension_backend_assert = True
-            has_shop_new_id = bool(SHOP_NEW_ID_PATTERN.search(step["evidence"]))
         if "fallbacks" in step:
             check_type(f"steps[{index}].fallbacks", step["fallbacks"], list)
 
     if not has_extension_backend_assert:
-        fail("successful handoffs must include a verified assert step proving the selected non-iab Browser extension backend")
-    if not has_shop_new_id:
-        fail("successful handoffs must include the selected KV dynamic browser extra.shop_new_id in the verified backend assert evidence")
+        fail("successful handoffs must include a verified assert step proving the selected Browser extension backend")
 
     print("handoff valid")
     return 0

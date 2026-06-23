@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -43,10 +44,7 @@ RESULT_VALUE_PATTERNS = (
     re.compile(r"expected_.*(product|title|price|asin|url|text|count|record)", re.IGNORECASE),
     re.compile(r"(observed|extracted)_.*(product|title|price|asin|url|text|count|record)", re.IGNORECASE),
 )
-SHOP_NEW_ID_PATTERN = re.compile(
-    r"\b(?:extra\.)?shop_new_id\s*[:=]\s*[\"']?([A-Za-z0-9_-]{6,})[\"']?\b",
-    re.IGNORECASE,
-)
+ORIGINAL_PROMPT_HEADING = "## Original Codex Skill Prompt"
 
 
 def fail(message: str) -> None:
@@ -196,6 +194,20 @@ def ensure_framework_contract(paths: dict[str, Path]) -> None:
         fail("script.py must define SCRIPT_FORMS and SCRIPT_VARIABLES")
 
 
+def ensure_readme_prompt_contract(paths: dict[str, Path]) -> None:
+    readme_text = read_text(paths["readme.md"])
+    heading_index = readme_text.find(ORIGINAL_PROMPT_HEADING)
+    if heading_index == -1:
+        fail(f"readme.md must include a {ORIGINAL_PROMPT_HEADING!r} section with the full Codex skill prompt")
+
+    section_body = readme_text[heading_index + len(ORIGINAL_PROMPT_HEADING) :]
+    next_heading = re.search(r"(?m)^##\s+", section_body)
+    if next_heading:
+        section_body = section_body[: next_heading.start()]
+    if not section_body.strip():
+        fail(f"readme.md {ORIGINAL_PROMPT_HEADING!r} section must not be empty")
+
+
 def browser_config_values(main_tree: ast.Module) -> tuple[str | None, str | None]:
     for node in ast.walk(main_tree):
         if not isinstance(node, ast.Call):
@@ -212,25 +224,13 @@ def browser_config_values(main_tree: ast.Module) -> tuple[str | None, str | None
     return None, None
 
 
-def handoff_shop_new_id(handoff_path: Path) -> str:
-    text = read_text(handoff_path)
-    matches = SHOP_NEW_ID_PATTERN.findall(text)
-    unique_matches = sorted(set(matches))
-    if not unique_matches:
-        fail("browser-handoff.json must include the selected KV dynamic browser extra.shop_new_id in backend evidence")
-    if len(unique_matches) > 1:
-        fail(f"browser-handoff.json contains multiple KV dynamic browser shop_new_id values: {unique_matches}")
-    return unique_matches[0]
-
-
 def ensure_browser_config_contract(paths: dict[str, Path]) -> None:
     main_tree = parse_python(paths["main.py"])
     platform, browser_id = browser_config_values(main_tree)
-    expected_id = handoff_shop_new_id(paths["browser-handoff.json"])
-    if platform != "kv":
-        fail('main.py BrowserConfig.platform must be exactly "kv"')
-    if browser_id != expected_id:
-        fail(f"main.py BrowserConfig.id must match selected KV dynamic browser shop_new_id {expected_id!r}")
+    if not platform or not platform.strip():
+        fail("main.py BrowserConfig.platform must be a non-empty literal string from the confirmed RPA runtime")
+    if not browser_id or not browser_id.strip():
+        fail("main.py BrowserConfig.id must be a non-empty literal string from the confirmed RPA runtime")
 
 
 def ensure_debug_import_contract(paths: dict[str, Path], relative_output: Path) -> None:
@@ -415,21 +415,37 @@ def ensure_py_compile(paths: dict[str, Path]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate generated RPA Editor NextGen output before delivery.")
-    parser.add_argument("output_dir", help="Generated script output directory. In debug mode, this is the script input directory.")
+    parser.add_argument(
+        "output_dir",
+        nargs="?",
+        help="Generated script output directory. In debug mode, this is the script input directory. Defaults to RPA_SCRIPT_INPUT_DIR.",
+    )
     parser.add_argument(
         "--debug-root",
-        help="Local debug root. When set, output_dir is the script input directory and main.py imports must match that path.",
+        help="Local debug root. When set, output_dir is the script input directory and main.py imports must match that path. Defaults to RPA_DEBUG_ROOT.",
     )
     return parser.parse_args()
 
 
+def value_from_arg_or_env(arg_value: str | None, env_name: str, label: str) -> str:
+    value = arg_value or os.environ.get(env_name)
+    if not value:
+        fail(f"{label} is required; pass it as an argument or set {env_name}")
+    return value
+
+
 def main() -> int:
     args = parse_args()
-    output_dir = Path(args.output_dir)
-    if not args.debug_root:
+    output_dir = Path(value_from_arg_or_env(args.output_dir, "RPA_SCRIPT_INPUT_DIR", "script input directory"))
+    debug_root_value = args.debug_root or os.environ.get("RPA_DEBUG_ROOT")
+    if not debug_root_value:
         ensure_output_dir(output_dir)
-    debug_relative_output = ensure_debug_output_dir(output_dir, Path(args.debug_root))
+    debug_root = Path(debug_root_value)
+    if not output_dir.is_absolute():
+        output_dir = debug_root / output_dir
+    debug_relative_output = ensure_debug_output_dir(output_dir, debug_root)
     paths = ensure_required_files(output_dir)
+    ensure_readme_prompt_contract(paths)
     ensure_no_async(paths)
     ensure_framework_contract(paths)
     ensure_browser_config_contract(paths)

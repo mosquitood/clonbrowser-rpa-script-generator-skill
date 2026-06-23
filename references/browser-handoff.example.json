@@ -13,7 +13,7 @@
       "value": null,
       "wait_for": "selected backend is extension",
       "verified": true,
-      "evidence": "Selected Browser backend type=extension with selected dynamic browser shop_new_id=1857483922122772542 and safe metadata only; it is the single KV-backed Browser extension backend."
+      "evidence": "Selected Browser backend type=extension with safe backend id=browser-extension-1; the connected extension tab was visible before navigation."
     },
     {
       "intent": "Open the target page",

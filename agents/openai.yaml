@@ -1,3 +1,4 @@
-display_name: RPA Developer
-short_description: Generate validator-gated RPA Editor NextGen scripts from live Browser handoffs.
-default_prompt: Use the rpa-developer skill to collect the URL-input requirements, confirm the local debug root and script input directory, use the single KV-backed Browser session discovered from KuajingVSCore --client-server and /v2/dynamic-browsers, and generate validated RPA Editor NextGen files.
+interface:
+  display_name: "RPA Developer"
+  short_description: "Generate validated RPA Editor NextGen scripts"
+  default_prompt: "Use $rpa-developer to collect URL-input requirements, explore with a connected Browser extension backend, and generate validated RPA Editor NextGen files."

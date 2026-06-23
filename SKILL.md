@@ -7,7 +7,7 @@ description: Develop RPA Editor NextGen automation scripts from Browser upstream
 
 ## Requirement Intake Gate
 
-Before checking KV (Kuajingvs), opening Browser, navigating to a page, or collecting local-debug paths, decompose the user's current request into a concrete URL-input collection requirement. Do this analysis yourself first; do not ask questions until after you have tried to form a complete requirement from the current message and project context.
+Before discovering a Browser backend, opening Browser, navigating to a page, or collecting local-debug paths, decompose the user's current request into a concrete URL-input collection requirement. Do this analysis yourself first; do not ask questions until after you have tried to form a complete requirement from the current message and project context.
 
 Supported requirement shape for this skill:
 
@@ -41,7 +41,7 @@ Start-of-task setup gate: before checking, opening, attaching to, or exploring a
 
 Self-contained execution rule: this skill must be executable from the current `SKILL.md`, `references/`, and `scripts/` files alone. Do not depend on Codex memory, prior chat summaries, previous successful runs, or remembered Browser backend state to decide the browser route. If the user says "do not use memory" or "不要使用记忆", that only forbids memory-derived assumptions; it does not relax any rule in this skill.
 
-Default browser route: for this skill, every browser exploration that will become an RPA script must first run the KV dynamic-browser preflight in the "KV Dynamic Browser Rule" below, then use the upstream Browser skill from `plugin://browser@openai-bundled`. This is the default even when the user only says "use this local skill", "本地 skill", or asks to open a website without naming KV or Browser. Do not replace Browser with Codex In-app Browser, local Chrome, raw CDP, Playwright `connect_over_cdp`, remote debugging port automation, HTTP fetching, or any other browser route.
+Default browser route: for this skill, every browser exploration that will become an RPA script must use the upstream Browser skill from `plugin://browser@openai-bundled` and a connected `type: "extension"` backend. The extension-connected browser may come from KV/ClonBrowser, Chrome, or another supported browser; do not require a specific browser vendor or profile manager. Do not replace Browser with Codex In-app Browser, raw CDP, Playwright `connect_over_cdp`, remote debugging port automation, HTTP fetching, or any other non-extension route.
 
 Browser discovery rule: the user is not required to explicitly mention `@浏览器`, `@browser`, or `plugin://browser@openai-bundled` in each task. This skill must discover Browser availability from the current Codex skills/plugins context. Treat Browser as available when the current session lists `browser:browser`, `Browser`, `@browser`, `@浏览器`, or the Browser plugin. Do not claim Browser is unavailable just because the user did not mention it in the prompt.
 
@@ -66,70 +66,25 @@ Use this workflow when the user asks for any browser task that must become an RP
 12. After a valid successful handoff, automatically generate the RPA Editor NextGen standard files in the same task: `readme.md`, `script.py`, `source.py`, and `main.py`. Do not stop after printing, logging, summarizing, or reporting Browser results, and do not ask whether to generate scripts unless the user explicitly asks for exploration only.
 13. Keep Browser discovery code separate from final RPA code. Do not paste raw exploratory Playwright code directly into the final script unless it matches this framework's page-object conventions.
 
-## KV Dynamic Browser Rule
+## Extension Browser Rule
 
-For this skill's default browser route, Browser exploration must use the single already-started KV (Kuajingvs) dynamic browser. Discover the local KV OpenAPI endpoint from the current computer's `KuajingVSCore` process list, then use only the dynamic-browser list returned by that endpoint. Do not query a full environment list as the source of runnable browsers, and do not launch a profile automatically.
-
-Endpoint discovery:
-
-1. Search the current computer's process list for processes whose process name or command line contains `KuajingVSCore`.
-2. Extract the value immediately following the `--client-server` command-line argument. That value is the local KV OpenAPI endpoint, for example `http://127.0.0.1:<port>`.
-3. If no `KuajingVSCore` process with `--client-server` is found, stop before exploration and tell the user to start KV first.
-4. If multiple different `--client-server` endpoints are found, stop before exploration and ask the user to leave only the target KV runtime running, or provide the intended endpoint. Do not guess by process order, PID, or newest process.
-
-After discovering the endpoint, call:
-
-```bash
-curl -X GET "<client-server-endpoint>/v2/dynamic-browsers" -H "accept: application/json"
-```
-
-Expected response shape:
-
-```json
-{
-  "model": "browser.list",
-  "data": [
-    {
-      "model": "dynamicBrowser.info",
-      "id": "shop_d8364e1dd96c4c15a9c6b996cb372224",
-      "extra": {
-        "brand": "chrome",
-        "shop_name": "中台",
-        "shop_new_id": "1857483922122772542"
-      },
-      "remote_debugging_port": 57008,
-      "pid": 12864
-    }
-  ]
-}
-```
-
-Single-browser selection rules:
-
-1. If the dynamic browser list is empty, stop before exploration and tell the user to start the required KV browser first. Then wait for the user's reply. After the user replies, continue only by rediscovering the KV endpoint and checking `/v2/dynamic-browsers` again; "continue" never means switching to another browser path. Do not continue with Browser exploration in the same attempt, and do not use any already-connected Chrome extension backend, Codex In-app Browser, local Chrome profile, CDP endpoint, or generic Browser backend as a substitute.
-2. If exactly one dynamic browser is returned, use that browser.
-3. If multiple dynamic browsers are returned, stop before exploration. Do not choose by shop name, id, `shop_new_id`, array order, newest process, extension instance, or any other heuristic. Tell the user to close or stop all extra KV browser instances so exactly one dynamic browser remains, then rerun the task.
-4. Do not close extra KV browser instances automatically unless the user explicitly asks you to close them in the current turn. Closing browsers can interrupt logged-in sessions or active work.
-5. Read `remote_debugging_port` from the single dynamic browser only as safe diagnostic metadata. Do not use `http://127.0.0.1:<remote_debugging_port>`, a websocket debugger URL, or Playwright `connect_over_cdp` as the automation path.
-6. Preserve the selected dynamic browser `extra.shop_new_id` as safe handoff evidence. This value is not optional; generated `main.py` must use it as `BROWSER_CONFIG.id`.
-7. Before Browser exploration starts, verify that the Browser upstream can actually use or attach to the single KV-backed Browser extension backend. If Browser cannot see or attach to that backend, stop and report that the selected KV browser is not available to the Browser upstream; do not fall back to in-app browser, raw CDP, remote debugging port automation, local Chrome, or generic Playwright.
+For this skill's default browser route, Browser exploration may use any browser that is connected through a Browser extension backend. Do not require KV, ClonBrowser, a fingerprint browser, a particular executable, or a particular profile manager.
 
 Browser backend selection rules:
 
-1. For this skill's default browser route, the Browser upstream must not call `agent.browsers.get("iab")`, must not create tabs in `type: "iab"`, and must not use Codex In-app Browser for exploration.
-2. Browser backend selection is allowed only after `/v2/dynamic-browsers` returns exactly one KV dynamic browser. If the dynamic browser list is empty or has multiple items, do not inspect, reuse, or select any Browser backend; stop at the dynamic-browser condition and wait for the user to fix the browser state.
-3. After reading `/v2/dynamic-browsers`, refresh Browser backends with `agent.browsers.list()` and select a `type: "extension"` backend that corresponds to the single KV browser.
-4. Before opening the target site, prove that the selected backend is not `type: "iab"` by recording the selected Browser backend type, selected dynamic browser `extra.shop_new_id`, and safe metadata in the handoff evidence. Safe metadata only; do not include credentials or profile secrets.
-5. If the only available controllable backend is `type: "iab"`, stop immediately and report that the fingerprint browser is not connected to Browser. Do not open the target site in the in-app browser.
-6. If Browser runtime or `agent.browsers.list()` is not available in the current session, stop immediately and report that the upstream Browser skill is unavailable. Do not continue through CDP, Playwright, HTTP requests, or another tool.
-7. If multiple non-iab extension backends are visible and the single KV backend cannot be identified unambiguously, stop and ask the user to leave only the target KV window running with the Browser Use extension enabled.
+1. Refresh available Browser backends with `agent.browsers.list()` before opening the target site.
+2. Select a backend whose type is exactly `extension`. Do not call `agent.browsers.get("iab")`, create tabs in `type: "iab"`, or use Codex In-app Browser for exploration.
+3. If exactly one extension backend is available, select it.
+4. If no extension backend is available, stop and ask the user to open the intended browser, install or enable the Browser extension, and connect it. Do not fall back to IAB, raw CDP, a remote debugging port, HTTP requests, or ad hoc Playwright.
+5. If multiple extension backends are available and the user's intended browser cannot be identified from safe metadata or current context, stop and ask the user which connected browser to use. Do not guess by array order or silently close browsers.
+6. Before opening the target site, include a verified `assert` step in the handoff proving that the selected backend type is `extension`. Record only safe backend metadata needed to distinguish the chosen browser, such as a non-secret backend id, browser name, or visible tab title.
+7. The upstream extension backend is discovery infrastructure, not necessarily the RPA runtime browser. Do not derive `main.py` `BrowserConfig` values from extension backend ids unless the local RPA runtime explicitly uses the same identifier.
 
 Privacy and logging rules:
 
-- The KV process command line and dynamic-browser response can contain accounts, passwords, proxy credentials, 2FA keys, cookies, extension metadata, filesystem paths, proxy URLs, webdriver paths, and other sensitive data.
-- Never print, copy into handoff JSON, copy into generated RPA files, or summarize those sensitive fields.
-- When reporting dynamic browser state to the user, show only safe fields: top-level `id`, `pid`, `remote_debugging_port`, `extra.brand`, `extra.shop_name`, and `extra.shop_new_id`.
-- Do not include KV credentials, proxy credentials, cookies, tokens, local user data paths, webdriver paths, profile metadata, or raw process command lines in `SCRIPT_VARIABLES`, `VARIABLE_VALUES`, `readme.md`, logs, or the final response.
+- Browser backend metadata can contain profile information, filesystem paths, URLs, cookies, tokens, or account details.
+- Never print, copy into handoff JSON, copy into generated RPA files, or summarize sensitive fields.
+- Record only the minimum safe metadata necessary to identify the selected extension backend.
 
 ## Forced Headed Browser Rule
 
@@ -181,26 +136,31 @@ For every requested state-setting goal, require at least one `steps[]` entry who
 
 ## Local Debug Generation Rule
 
-After the Requirement Intake Gate has produced a complete URL-input collection requirement, and before checking or opening any browser page, require the local debug root and the script input directory. This is a pre-browser setup gate, not a post-handoff decision. Do not ask whether local debugging should be used; this skill's default delivery route is local-debug delivery into the user's script input directory.
+After the Requirement Intake Gate has produced a complete URL-input collection requirement, and before checking or opening any browser page, resolve the local debug root and the script input directory. This is a pre-browser setup gate, not a post-handoff decision. Do not ask whether local debugging should be used; this skill's default delivery route is local-debug delivery into the user's script input directory.
+
+The local debug root and script input directory may be supplied either by the user's current message or by environment variables. User-provided values take precedence over environment variables. If a value is not provided in the message, read it from:
+
+- `RPA_DEBUG_ROOT`: local debug root directory.
+- `RPA_SCRIPT_INPUT_DIR`: script input directory, either absolute or relative to `RPA_DEBUG_ROOT`.
 
 Treat any user-provided "debug directory", "debug root", "local debug directory", "local project root", "调试目录", "调试根目录", or equivalent path for running the generated script as the local debug root unless the user clearly labels it as the script input directory.
 
 If the user labels a path as the script input directory, generated script directory, or generated script subdirectory, treat that path as the script input directory. The script input directory is the final write location, not a parent directory for another generated folder.
 
-After the local debug root is confirmed, require the user's script input directory before browser exploration starts. Do not invent or auto-choose a custom output directory. The generated files must be written directly into the confirmed script input directory.
+After the local debug root is resolved, resolve the script input directory before browser exploration starts. Do not invent or auto-choose a custom output directory. The generated files must be written directly into the confirmed script input directory.
 
-The local debug root and script input directory must be locked before browser exploration starts. Do not open Browser, check KV, navigate to the target site, or create a handoff until both the requirement and delivery paths are complete. If either path is ambiguous, stop and ask for the missing path value first.
+The local debug root and script input directory must be locked before browser exploration starts. Do not open Browser, discover extension backends, navigate to the target site, or create a handoff until both the requirement and delivery paths are complete. If either path is missing from both the user request and environment variables, or if either path is ambiguous, stop and ask for the missing path value first.
 
 Required local-debug delivery rules:
 
-1. Require a local debug root directory before writing files. If the user has not provided one, stop and ask for the local debug root; do not write into the skill `outputs/` directory as a substitute.
-2. Require the script input directory before browser exploration starts. If the user has not provided it, stop and ask for the script input directory; do not choose a task-derived folder or use the skill `outputs/` directory as a substitute.
+1. Require a local debug root directory before writing files. If the user has not provided one and `RPA_DEBUG_ROOT` is not set, stop and ask for the local debug root; do not write into the skill `outputs/` directory as a substitute.
+2. Require the script input directory before browser exploration starts. If the user has not provided it and `RPA_SCRIPT_INPUT_DIR` is not set, stop and ask for the script input directory; do not choose a task-derived folder or use the skill `outputs/` directory as a substitute.
 3. The script input directory may be provided as an absolute path under the local debug root, or as a path relative to the local debug root. Resolve it to a full path before writing files.
 4. The actual output directory must be exactly the confirmed script input directory. Write `readme.md`, `script.py`, `source.py`, `main.py`, and `browser-handoff.json` directly inside that directory. Do not create an extra task-named subdirectory under it.
 5. The script input directory must be importable as Python package parts relative to the local debug root: each path segment must be a valid Python identifier. If it is not importable, stop and ask for an importable script input directory instead of silently changing it.
-6. Derive `main.py`'s `source.py` import from the script input directory relative to the debug root. Split the relative path into Python package parts and append `.source`. For a script input directory `scripts\kuajingvs\amazon`, `main.py` must use `from scripts.kuajingvs.amazon.source import <PageClassName>`.
-7. The local debug command must be run from the local debug root with `uv run <script_input_directory>\main.py`. Example: from `D:\project`, run `uv run .\scripts\kuajingvs\amazon\main.py`.
-8. When validating local-debug output, run `python scripts/validate_generated_rpa.py <script-input-dir> --debug-root <local-debug-root>` from this skill root before running the local debug command.
+6. Derive `main.py`'s `source.py` import from the script input directory relative to the debug root. Split the relative path into Python package parts and append `.source`. For a script input directory `scripts\business\amazon`, `main.py` must use `from scripts.business.amazon.source import <PageClassName>`.
+7. The local debug command must be run from the local debug root with `uv run <script_input_directory>\main.py`. Example: from `D:\project`, run `uv run .\scripts\business\amazon\main.py`.
+8. When validating local-debug output, run `python scripts/validate_generated_rpa.py <script-input-dir> --debug-root <local-debug-root>` from this skill root before running the local debug command. If the paths came from environment variables, `python scripts/validate_generated_rpa.py` may be run without path arguments because the validator reads `RPA_SCRIPT_INPUT_DIR` and `RPA_DEBUG_ROOT`.
 9. If validation passes, run the local debug command and report the command, working directory, and result. If validation fails, fix the generated files first and do not run local debug.
 
 If the user explicitly refuses local-debug delivery, stop and ask for a delivery location that preserves this skill's required local debug root and script input directory contract. Do not silently fall back to the skill `outputs/` directory.
@@ -209,13 +169,19 @@ If the user explicitly refuses local-debug delivery, stop and ask for a delivery
 
 A browser-to-RPA task is complete only after the final RPA files have been written and validated. Treat printed product names, extracted page data, screenshots, or a successful Browser handoff as intermediate evidence, not as the final deliverable.
 
+## Original Prompt Documentation Rule
+
+Every generated `readme.md` must include a section titled exactly `## Original Codex Skill Prompt`. In that section, record the complete text the user manually entered in Codex when invoking this skill for the current generation task, including all requirements, URLs, paths, field mappings, follow-up clarifications, and runtime details that shaped the final script.
+
+Preserve the prompt text as a handoff aid for future maintenance. Do not replace it with a summary, paraphrase, or only the parsed requirement. If multiple user messages in the current task refine the same generation request, include them in chronological order under the same section.
+
 After every successful Browser handoff:
 
 1. Choose the output directory before writing files:
    - Use the Local Debug Generation Rule decision made at task start. The output directory must be exactly the confirmed script input directory and must follow the input-directory/import rules in that section.
    - Do not create or use a task-derived `outputs/` folder when local debug root or script input directory is missing. Stop and ask for the missing path instead.
    - Do not write generated RPA files into the caller's unrelated working directory, a temporary directory, or another repo's `outputs/` directory.
-2. Write all four required files: `readme.md`, `script.py`, `source.py`, and `main.py`.
+2. Write all required files: `readme.md`, `script.py`, `source.py`, `main.py`, and `browser-handoff.json`. The `readme.md` must satisfy the Original Prompt Documentation Rule.
 3. Ensure `script.py`, `source.py`, and `main.py` all contain the current task inputs and runtime configuration from the successful handoff. Do not hard-code desired result items, extracted result values, product names, titles, IDs, prices, or other page outputs as variables.
 4. Run `python scripts/validate_generated_rpa.py <script-input-dir> --debug-root <local-debug-root>` from this skill root. This is the mandatory delivery gate and it must pass before the task can be reported complete. It validates required files, output location, handoff truth evidence, synchronous runtime usage, framework entrypoints, variable consistency, disallowed result variables, and Python syntax.
 5. If `validate_generated_rpa.py` fails for any reason, do not deliver the script and do not report success. Fix the generated files or rerun the Browser handoff, then run the validator again.
@@ -289,8 +255,8 @@ from scripts.<business_namespace>.<script_name>.source import <PageClassName>
 from app.core.developer.browser.models import BrowserConfig
 
 BROWSER_CONFIG = BrowserConfig(
-    platform="kv",
-    id="1857483922118578205",
+    platform="<runtime_platform>",
+    id="<runtime_browser_id>",
 )
 
 VARIABLE_VALUES = {
@@ -314,19 +280,9 @@ Adapt these placeholders for each generated script:
 - `<PageClassName>`: page-object class from `source.py`, derived from the current task.
 - `<variable_name>` and `<task_value>`: input/config variables required by the generated script, not extracted output values.
 
-When local debugging is confirmed, the `main.py` import path is not chosen independently. It must be derived from the script input directory relative to the local debug root. Convert path separators to dots and append `.source`; for example, `scripts\kuajingvs\amazon` becomes `from scripts.kuajingvs.amazon.source import <PageClassName>`. The local debug command must be run from the debug root as `uv run .\scripts\kuajingvs\amazon\main.py` for that example.
+When local debugging is confirmed, the `main.py` import path is not chosen independently. It must be derived from the script input directory relative to the local debug root. Convert path separators to dots and append `.source`; for example, `scripts\business\amazon` becomes `from scripts.business.amazon.source import <PageClassName>`. The local debug command must be run from the debug root as `uv run .\scripts\business\amazon\main.py` for that example.
 
-Keep `BROWSER_CONFIG.platform`, `BROWSER_CONFIG.id`, default window variables, and `timeout=30000` unless the user explicitly requests different runtime settings. Always include input/config variables in `VARIABLE_VALUES` so local developer runs do not depend on external defaults. Never include site-specific or task-specific values in the skill itself; derive them only from the current user request and the successful handoff. Never include extracted outputs in `VARIABLE_VALUES`.
-For this KV route, `BROWSER_CONFIG` is not a free choice. Always generate:
-
-```python
-BROWSER_CONFIG = BrowserConfig(
-    platform="kv",
-    id="<selected_shop_new_id>",
-)
-```
-
-`platform` must be exactly `"kv"`. `id` must be the `extra.shop_new_id` field from the single KV dynamic browser returned by `/v2/dynamic-browsers` and recorded in the successful browser handoff evidence. Do not use Browser extension instance ids, remote debugging ports, top-level dynamic browser ids, shop names, process ids, or any remembered/default id.
+Set `BROWSER_CONFIG.platform` and `BROWSER_CONFIG.id` from the confirmed local RPA debug runtime. They are runtime configuration, not Browser extension discovery metadata. If the user or debug project does not provide these values, ask for them before generating `main.py`; do not copy an extension backend id into `BrowserConfig` by assumption. Keep default window variables and `timeout=30000` unless the user explicitly requests different runtime settings. Always include input/config variables in `VARIABLE_VALUES` so local developer runs do not depend on external defaults. Never include site-specific or task-specific values in the skill itself; derive them only from the current user request, confirmed runtime, and successful handoff. Never include extracted outputs in `VARIABLE_VALUES`.
 ## source.py Variable Standard
 
 Generate `source.py` so runtime variables are read through `self.proxy.use(..., FormateVariableValue).value()` properties instead of declaring variable placeholders inside `ARGS_SETTINGS` or relying on class attributes being injected.
