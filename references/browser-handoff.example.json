@@ -7,13 +7,13 @@
   "playwright_python": "from playwright.sync_api import sync_playwright\n\nwith sync_playwright() as p:\n    browser = p.chromium.launch(headless=False)\n    page = browser.new_page()\n    page.goto('https://example.com/')\n    page.get_by_role('button', name='Example').click()\n",
   "steps": [
     {
-      "intent": "Verify selected Browser backend",
+      "intent": "Verify selected Chrome extension backend",
       "action": "assert",
-      "locator": "Browser backend metadata",
+      "locator": "Chrome backend metadata",
       "value": null,
       "wait_for": "selected backend is extension",
       "verified": true,
-      "evidence": "Selected Browser backend type=extension with safe backend id=browser-extension-1; the connected extension tab was visible before navigation."
+      "evidence": "Selected Chrome backend type=extension with safe backend id=browser-extension-1; the connected extension tab was visible before navigation."
     },
     {
       "intent": "Open the target page",

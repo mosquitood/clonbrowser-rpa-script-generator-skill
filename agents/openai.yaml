@@ -1,4 +1,4 @@
 interface:
   display_name: "RPA Developer"
   short_description: "Generate validated RPA Editor NextGen scripts"
-  default_prompt: "Use $rpa-developer to collect URL-input requirements, explore with a connected Browser extension backend, and generate validated RPA Editor NextGen files."
+  default_prompt: "Use $rpa-developer to collect URL-input requirements, explore with $chrome:control-chrome through a connected type: extension backend, and generate validated RPA Editor NextGen files."

@@ -7,7 +7,7 @@ description: Develop RPA Editor NextGen automation scripts from Browser upstream
 
 ## Requirement Intake Gate
 
-Before discovering a Browser backend, opening Browser, navigating to a page, or collecting local-debug paths, decompose the user's current request into a concrete URL-input collection requirement. Do this analysis yourself first; do not ask questions until after you have tried to form a complete requirement from the current message and project context.
+Before discovering a Chrome extension backend, opening Chrome, navigating to a page, or collecting local-debug paths, decompose the user's current request into a concrete URL-input collection requirement. Do this analysis yourself first; do not ask questions until after you have tried to form a complete requirement from the current message and project context.
 
 Supported requirement shape for this skill:
 
@@ -35,49 +35,49 @@ Stop before local-debug setup and browser exploration when any missing or ambigu
 
 If the user asks for a non-URL workflow with incomplete details, do not invent a URL-input interpretation. Ask them to either provide the URL-input source or describe the non-URL workflow fully enough to define inputs, actions, outputs, and success criteria.
 
-## Browser Handoff Workflow
+## Chrome Handoff Workflow
 
-Start-of-task setup gate: before checking, opening, attaching to, or exploring any browser page, first apply the Requirement Intake Gate. After the URL-input collection requirement is complete, apply the Local Debug Generation Rule and collect both the local debug root and script input directory before browser exploration starts.
+Start-of-task setup gate: before checking, opening, attaching to, or exploring any browser page, first apply the Requirement Intake Gate. After the URL-input collection requirement is complete, apply the Local Debug Generation Rule and collect both the local debug root and script input directory before Chrome exploration starts.
 
-Self-contained execution rule: this skill must be executable from the current `SKILL.md`, `references/`, and `scripts/` files alone. Do not depend on Codex memory, prior chat summaries, previous successful runs, or remembered Browser backend state to decide the browser route. If the user says "do not use memory" or "不要使用记忆", that only forbids memory-derived assumptions; it does not relax any rule in this skill.
+Self-contained execution rule: this skill must be executable from the current `SKILL.md`, `references/`, and `scripts/` files alone. Do not depend on Codex memory, prior chat summaries, previous successful runs, or remembered Chrome backend state to decide the browser route. If the user says "do not use memory" or "不要使用记忆", that only forbids memory-derived assumptions; it does not relax any rule in this skill.
 
-Default browser route: for this skill, every browser exploration that will become an RPA script must use the upstream Browser skill from `plugin://browser@openai-bundled` and a connected `type: "extension"` backend. The extension-connected browser may come from KV/ClonBrowser, Chrome, or another supported browser; do not require a specific browser vendor or profile manager. Do not replace Browser with Codex In-app Browser, raw CDP, Playwright `connect_over_cdp`, remote debugging port automation, HTTP fetching, or any other non-extension route.
+Default browser route: for this skill, every browser exploration that will become an RPA script must use the upstream Chrome skill `$chrome:control-chrome` and a connected `type: "extension"` backend. The extension backend must still be discovered and selected before navigation. Do not replace Chrome with Codex In-app Browser, raw CDP, Playwright `connect_over_cdp`, remote debugging port automation, HTTP fetching, or any other non-extension route.
 
-Browser discovery rule: the user is not required to explicitly mention `@浏览器`, `@browser`, or `plugin://browser@openai-bundled` in each task. This skill must discover Browser availability from the current Codex skills/plugins context. Treat Browser as available when the current session lists `browser:browser`, `Browser`, `@browser`, `@浏览器`, or the Browser plugin. Do not claim Browser is unavailable just because the user did not mention it in the prompt.
+Chrome discovery rule: the user is not required to explicitly mention `@chrome`, `$chrome:control-chrome`, or the Chrome plugin in each task. This skill must discover Chrome availability from the current Codex skills/plugins context. Treat Chrome as available when the current session lists `chrome:control-chrome`, `control-chrome`, `@chrome`, or the Chrome plugin. Do not claim Chrome is unavailable just because the user did not mention it in the prompt.
 
 Use this workflow when the user asks for any browser task that must become an RPA script, for example: open a target site, select a category, fill fields, search, extract page data, or complete another browser workflow and convert the discovered steps into Playwright Python handoff data.
 
-1. Before starting page exploration, check the current Codex skills/plugins context for the upstream Browser skill from `plugin://browser@openai-bundled`. Accept the installed skill names/chips `browser:browser`, `Browser`, `@browser`, `@浏览器`, or the Browser plugin entry. If it is not installed, enabled, or listed in the current session, stop before exploration and tell the user to install or enable `plugin://browser@openai-bundled`. Do not require the user to mention Browser explicitly in the task prompt, and do not continue through raw CDP or any substitute browser route.
-2. Use `@浏览器` / `browser:browser` first when page inspection, clicking, typing, screenshots, or element discovery is needed. Do not use generic web search, a separate ad hoc Playwright session, raw CDP, `remote_debugging_port`, Playwright `connect_over_cdp`, or another browser backend as the upstream exploration path.
-3. Force headed mode for every upstream Browser run. Load the Browser skill, create or claim a visible headed browser tab/window before navigation, and keep that visible browser surface as the only source of page observations. Do not complete discovery through headless Playwright, background content fetches, generic web search, HTTP requests, hidden tabs, or any browser backend that the user cannot watch. If headed/visible mode cannot be enabled and confirmed before the first navigation, stop and report that the Browser upstream is unavailable in the required mode.
-4. Treat the Browser step as an upstream dependency with an explicit status. Continue only when the Browser handoff contains `"status": "success"`.
-5. If the Browser handoff is missing, invalid, or has any status other than `success`, rerun the Browser step. Retry at most 3 total attempts.
-6. If all 3 Browser attempts fail, stop immediately and report the RPA generation as failed. Do not generate final RPA files from failed or partial Browser output.
-7. Ask the Browser step to produce a Playwright Python handoff, not a finished RPA script.
+1. Before starting page exploration, check the current Codex skills/plugins context for the upstream Chrome skill `$chrome:control-chrome`. Accept the installed skill names/chips `chrome:control-chrome`, `control-chrome`, `@chrome`, or the Chrome plugin entry. If it is not installed, enabled, or listed in the current session, stop before exploration and tell the user to install or enable the Chrome plugin. Do not require the user to mention Chrome explicitly in the task prompt, and do not continue through raw CDP or any substitute browser route.
+2. Use `$chrome:control-chrome` first when page inspection, clicking, typing, screenshots, or element discovery is needed. Do not use generic web search, a separate ad hoc Playwright session, raw CDP, `remote_debugging_port`, Playwright `connect_over_cdp`, or another browser backend as the upstream exploration path.
+3. Force headed mode for every upstream Chrome run. Load the Chrome skill, create or claim a visible headed Chrome tab/window before navigation, and keep that visible Chrome surface as the only source of page observations. Do not complete discovery through headless Playwright, background content fetches, generic web search, HTTP requests, hidden tabs, or any browser backend that the user cannot watch. If headed/visible mode cannot be enabled and confirmed before the first navigation, stop and report that the Chrome upstream is unavailable in the required mode.
+4. Treat the Chrome step as an upstream dependency with an explicit status. Continue only when the Chrome handoff contains `"status": "success"`.
+5. If the Chrome handoff is missing, invalid, or has any status other than `success`, rerun the Chrome step. Retry at most 3 total attempts.
+6. If all 3 Chrome attempts fail, stop immediately and report the RPA generation as failed. Do not generate final RPA files from failed or partial Chrome output.
+7. Ask the Chrome step to produce a Playwright Python handoff, not a finished RPA script.
 8. The handoff must focus only on reliable Browser-discovered facts:
    - target URL and final page state
    - selectors or locator strategies
    - fill values and click order
    - waits, assertions, and known navigation boundaries
    - screenshots or trace notes when relevant
-9. Every locator, state assertion, extracted field, and interaction in the Browser handoff must be verified against real elements in the live page. Do not invent selectors, infer nonexistent buttons, or use placeholder locators from memory, documentation, prior runs, or generic site knowledge. If Browser cannot observe the element in the current page, the handoff must mark the attempt as failed or record the uncertainty in `warnings`; it must not report `status: success`.
+9. Every locator, state assertion, extracted field, and interaction in the Chrome handoff must be verified against real elements in the live page. Do not invent selectors, infer nonexistent buttons, or use placeholder locators from memory, documentation, prior runs, or generic site knowledge. If Chrome cannot observe the element in the current page, the handoff must mark the attempt as failed or record the uncertainty in `warnings`; it must not report `status: success`.
 10. Save or request the handoff in the JSON shape described by `references/browser-handoff-schema.md` when the task has more than a few steps.
 11. Validate the handoff with `scripts/validate_browser_handoff.py` before generating final RPA files. This validator must pass before RPA generation starts.
 12. After a valid successful handoff, automatically generate the RPA Editor NextGen standard files in the same task: `readme.md`, `script.py`, `source.py`, and `main.py`. Do not stop after printing, logging, summarizing, or reporting Browser results, and do not ask whether to generate scripts unless the user explicitly asks for exploration only.
 13. Keep Browser discovery code separate from final RPA code. Do not paste raw exploratory Playwright code directly into the final script unless it matches this framework's page-object conventions.
 
-## Extension Browser Rule
+## Extension Chrome Backend Rule
 
-For this skill's default browser route, Browser exploration may use any browser that is connected through a Browser extension backend. Do not require KV, ClonBrowser, a fingerprint browser, a particular executable, or a particular profile manager.
+For this skill's default browser route, Chrome exploration must use a browser that is connected through an extension backend. Do not skip extension backend discovery. Do not require KV, ClonBrowser, a fingerprint browser, a particular executable, or a particular profile manager.
 
 Browser backend selection rules:
 
-1. Refresh available Browser backends with `agent.browsers.list()` before opening the target site.
+1. Refresh available Chrome/browser backends with `agent.browsers.list()` before opening the target site.
 2. Select a backend whose type is exactly `extension`. Do not call `agent.browsers.get("iab")`, create tabs in `type: "iab"`, or use Codex In-app Browser for exploration.
 3. If exactly one extension backend is available, select it.
 4. If no extension backend is available, stop and ask the user to open the intended browser, install or enable the Browser extension, and connect it. Do not fall back to IAB, raw CDP, a remote debugging port, HTTP requests, or ad hoc Playwright.
 5. If multiple extension backends are available and the user's intended browser cannot be identified from safe metadata or current context, stop and ask the user which connected browser to use. Do not guess by array order or silently close browsers.
-6. Before opening the target site, include a verified `assert` step in the handoff proving that the selected backend type is `extension`. Record only safe backend metadata needed to distinguish the chosen browser, such as a non-secret backend id, browser name, or visible tab title.
+6. Before opening the target site, include a verified `assert` step in the handoff proving that the selected backend type is `extension`. Record only safe backend metadata needed to distinguish the chosen Chrome/browser backend, such as a non-secret backend id, browser name, or visible tab title.
 7. The upstream extension backend is discovery infrastructure, not necessarily the RPA runtime browser. Do not derive `main.py` `BrowserConfig` values from extension backend ids unless the local RPA runtime explicitly uses the same identifier.
 
 Privacy and logging rules:
@@ -88,7 +88,7 @@ Privacy and logging rules:
 
 ## Forced Headed Browser Rule
 
-Every browser-to-RPA task must begin by explicitly opening or claiming a visible headed browser tab/window through the upstream Browser surface. The upstream handoff is not valid unless the live headed page was used for navigation, state-setting, extraction, and evidence collection.
+Every browser-to-RPA task must begin by explicitly opening or claiming a visible headed browser tab/window through the upstream Chrome surface. The upstream handoff is not valid unless the live headed page was used for navigation, state-setting, extraction, and evidence collection.
 
 The handoff `playwright_python` example must launch headed mode explicitly when it includes browser launch code, for example `browser = p.chromium.launch(headless=False)`. Handoffs that include `headless=True`, omit headed launch mode while showing a launch call, or rely on non-visual page fetches must be treated as failed and retried, not converted into RPA files.
 
@@ -96,7 +96,7 @@ The handoff `playwright_python` example must launch headed mode explicitly when 
 
 Generated RPA code must use the project's synchronous runtime style. Do not generate `async def`, `await`, async Playwright imports, async context managers, or coroutine-based helper methods in `main.py`, `script.py`, or `source.py`.
 
-The upstream Browser handoff must provide synchronous Playwright Python examples when it includes `playwright_python`. If the Browser exploration tool internally uses asynchronous automation, translate the handoff into synchronous Playwright-style steps before generating RPA code.
+The upstream Chrome handoff must provide synchronous Playwright Python examples when it includes `playwright_python`. If the Chrome exploration tool internally uses asynchronous automation, translate the handoff into synchronous Playwright-style steps before generating RPA code.
 
 Use synchronous framework calls such as `self.page.goto(...)`, `self.page.wait_for_load_state(...)`, `locator.wait_for(...)`, `self.human_click(...)`, and `self.type_text_by_random(...)`. Explicit waits are allowed and expected; fixed hard waits such as `time.sleep(...)` and `page.wait_for_timeout(...)` remain prohibited unless the framework exposes an approved randomized wait helper.
 
@@ -128,9 +128,9 @@ self.random_sleep(min_seconds=2, max_seconds=5)
 
 ## Explicit State-Setting Rule
 
-When the user asks to set any page state, instruct the upstream Browser skill to perform the setting flow even if the page already appears to be in the requested state. This applies generically to language, locale, delivery destination, marketplace, category, sort order, filters, search scope, account context, toggles, form defaults, and similar stateful controls.
+When the user asks to set any page state, instruct the upstream Chrome skill to perform the setting flow even if the page already appears to be in the requested state. This applies generically to language, locale, delivery destination, marketplace, category, sort order, filters, search scope, account context, toggles, form defaults, and similar stateful controls.
 
-Do not accept a pre-existing matching label, selected option, URL parameter, cookie state, or visible header as enough evidence by itself. The Browser handoff must include explicit steps that open the relevant control, choose or re-apply the requested value, submit or confirm the change when the UI provides a confirmation action, and then assert the final state. If the UI does not allow re-applying an already-selected value, the Browser handoff must record the attempted control path, the disabled or unavailable action, and the final authoritative confirmation.
+Do not accept a pre-existing matching label, selected option, URL parameter, cookie state, or visible header as enough evidence by itself. The Chrome handoff must include explicit steps that open the relevant control, choose or re-apply the requested value, submit or confirm the change when the UI provides a confirmation action, and then assert the final state. If the UI does not allow re-applying an already-selected value, the Chrome handoff must record the attempted control path, the disabled or unavailable action, and the final authoritative confirmation.
 
 For every requested state-setting goal, require at least one `steps[]` entry whose `intent` says it is re-applying that requested state. A handoff that only reports "already set" without an action attempt is incomplete and must be retried.
 
@@ -149,7 +149,7 @@ If the user labels a path as the script input directory, generated script direct
 
 After the local debug root is resolved, resolve the script input directory before browser exploration starts. Do not invent or auto-choose a custom output directory. The generated files must be written directly into the confirmed script input directory.
 
-The local debug root and script input directory must be locked before browser exploration starts. Do not open Browser, discover extension backends, navigate to the target site, or create a handoff until both the requirement and delivery paths are complete. If either path is missing from both the user request and environment variables, or if either path is ambiguous, stop and ask for the missing path value first.
+The local debug root and script input directory must be locked before browser exploration starts. Do not open Chrome, discover extension backends, navigate to the target site, or create a handoff until both the requirement and delivery paths are complete. If either path is missing from both the user request and environment variables, or if either path is ambiguous, stop and ask for the missing path value first.
 
 Required local-debug delivery rules:
 
@@ -167,7 +167,7 @@ If the user explicitly refuses local-debug delivery, stop and ask for a delivery
 
 ## Completion Gate
 
-A browser-to-RPA task is complete only after the final RPA files have been written and validated. Treat printed product names, extracted page data, screenshots, or a successful Browser handoff as intermediate evidence, not as the final deliverable.
+A browser-to-RPA task is complete only after the final RPA files have been written and validated. Treat printed product names, extracted page data, screenshots, or a successful Chrome handoff as intermediate evidence, not as the final deliverable.
 
 ## Original Prompt Documentation Rule
 
@@ -175,7 +175,7 @@ Every generated `readme.md` must include a section titled exactly `## Original C
 
 Preserve the prompt text as a handoff aid for future maintenance. Do not replace it with a summary, paraphrase, or only the parsed requirement. If multiple user messages in the current task refine the same generation request, include them in chronological order under the same section.
 
-After every successful Browser handoff:
+After every successful Chrome handoff:
 
 1. Choose the output directory before writing files:
    - Use the Local Debug Generation Rule decision made at task start. The output directory must be exactly the confirmed script input directory and must follow the input-directory/import rules in that section.
@@ -184,7 +184,7 @@ After every successful Browser handoff:
 2. Write all required files: `readme.md`, `script.py`, `source.py`, `main.py`, and `browser-handoff.json`. The `readme.md` must satisfy the Original Prompt Documentation Rule.
 3. Ensure `script.py`, `source.py`, and `main.py` all contain the current task inputs and runtime configuration from the successful handoff. Do not hard-code desired result items, extracted result values, product names, titles, IDs, prices, or other page outputs as variables.
 4. Run `python scripts/validate_generated_rpa.py <script-input-dir> --debug-root <local-debug-root>` from this skill root. This is the mandatory delivery gate and it must pass before the task can be reported complete. It validates required files, output location, handoff truth evidence, synchronous runtime usage, framework entrypoints, variable consistency, disallowed result variables, and Python syntax.
-5. If `validate_generated_rpa.py` fails for any reason, do not deliver the script and do not report success. Fix the generated files or rerun the Browser handoff, then run the validator again.
+5. If `validate_generated_rpa.py` fails for any reason, do not deliver the script and do not report success. Fix the generated files or rerun the Chrome handoff, then run the validator again.
 6. Remove temporary `__pycache__` folders after validation.
 7. In the final response, list the generated file paths and the `validate_generated_rpa.py` result. If no files were generated or validation did not pass, explicitly report the task as incomplete.
 
@@ -192,7 +192,7 @@ If a run only prints or returns extracted values after a successful handoff, con
 
 ## Expected Browser Handoff
 
-The Browser handoff is an intermediate artifact. It should answer: "how to find the elements and what values to fill". It should not decide the final RPA framework structure.
+The Chrome handoff is an intermediate artifact. It should answer: "how to find the elements and what values to fill". It should not decide the final RPA framework structure.
 
 Each step must include `verified: true` and an `evidence` string describing the real page observation used to confirm that the element or state exists. Evidence can be a visible text snippet, role/name match, selected option state, URL/title confirmation, element count, extracted field sample, or screenshot/trace note. Generic claims such as "selector should exist" or "common Amazon selector" are not valid evidence.
 
@@ -244,7 +244,7 @@ Generated variables must represent inputs, runtime configuration, or output dest
 
 Do not put desired result items or observed result values into `SCRIPT_VARIABLES`, `SCRIPT_FORMS`, `VARIABLE_VALUES`, `ARGS_SETTINGS`, or `FormateVariableValue` properties. Result values include product names, listing titles, IDs, prices, URLs, extracted text, counts, scraped records, and any other data the RPA script is supposed to discover while running.
 
-Use Browser handoff result values only as validation evidence and as guidance for selectors or extraction logic. The final `source.py` must reproduce the extraction at runtime and then report the discovered values through framework logging, business logging, connector output, or the task-appropriate output channel. Local `main.py` may provide input/config values needed to reproduce the run, but it must not pre-fill the expected extracted results.
+Use Chrome handoff result values only as validation evidence and as guidance for selectors or extraction logic. The final `source.py` must reproduce the extraction at runtime and then report the discovered values through framework logging, business logging, connector output, or the task-appropriate output channel. Local `main.py` may provide input/config values needed to reproduce the run, but it must not pre-fill the expected extracted results.
 ## main.py Generation Standard
 
 Generate `main.py` with the developer runner entrypoint from `app.core.developer.run`, not the older runtime developer import. The generated file must follow this shape:

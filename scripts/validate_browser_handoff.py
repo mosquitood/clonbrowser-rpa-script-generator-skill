@@ -143,7 +143,7 @@ def main() -> int:
             check_type(f"steps[{index}].fallbacks", step["fallbacks"], list)
 
     if not has_extension_backend_assert:
-        fail("successful handoffs must include a verified assert step proving the selected Browser extension backend")
+        fail("successful handoffs must include a verified assert step proving the selected Chrome extension backend")
 
     print("handoff valid")
     return 0
